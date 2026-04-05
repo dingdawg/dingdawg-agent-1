@@ -1,0 +1,30 @@
+{
+  "name": "@dingdawg/cli",
+  "version": "0.1.0",
+  "description": "DingDawg Agent CLI — Talk to your AI agents from the terminal",
+  "bin": {
+    "dd": "./bin/dd.js"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "dingdawg",
+    "llm"
+  ],
+  "license": "MIT",
+  "author": "Innovative Systems Global LLC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dingdawg/cli"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md"
+  ]
+}

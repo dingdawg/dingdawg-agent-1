@@ -1,0 +1,237 @@
+/**
+ * @dingdawg/chat-ui — SMS-like chat styling.
+ *
+ * Design principles:
+ *   - Mobile-first (min-width breakpoints, not max-width)
+ *   - 48px minimum touch targets
+ *   - CSS variables for theme support (light/dark/system)
+ *   - SMS bubble aesthetic: rounded corners, color separation by role
+ */
+
+/* ─── CSS Custom Properties (Theme tokens) ──────────────────────────────────── */
+
+:root {
+  /* User bubble — blue (iMessage style) */
+  --chat-bubble-user-bg: #007AFF;
+  --chat-bubble-user-text: #ffffff;
+  --chat-bubble-user-tail: #007AFF;
+
+  /* Assistant bubble — gray */
+  --chat-bubble-assistant-bg: #E5E5EA;
+  --chat-bubble-assistant-text: #1c1c1e;
+  --chat-bubble-assistant-tail: #E5E5EA;
+
+  /* System pill */
+  --chat-system-bg: rgba(0, 0, 0, 0.08);
+  --chat-system-text: rgba(0, 0, 0, 0.5);
+
+  /* Layout */
+  --chat-bubble-max-width: 85%;
+  --chat-bubble-radius: 18px;
+  --chat-bubble-tail-radius: 4px;
+  --chat-padding-x: 16px;
+  --chat-padding-y: 8px;
+
+  /* Touch targets */
+  --chat-min-touch: 48px;
+
+  /* Delivery status colors */
+  --chat-status-default: #8E8E93;
+  --chat-status-read: #007AFF;
+  --chat-status-error: #FF3B30;
+
+  /* Typing indicator */
+  --chat-typing-dot: #8E8E93;
+  --chat-typing-delay-1: 0s;
+  --chat-typing-delay-2: 0.2s;
+  --chat-typing-delay-3: 0.4s;
+}
+
+/* Dark mode overrides */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chat-bubble-assistant-bg: #2C2C2E;
+    --chat-bubble-assistant-text: #ffffff;
+    --chat-bubble-assistant-tail: #2C2C2E;
+    --chat-system-bg: rgba(255, 255, 255, 0.1);
+    --chat-system-text: rgba(255, 255, 255, 0.5);
+    --chat-status-default: #636366;
+    --chat-typing-dot: #636366;
+  }
+}
+
+/* ─── Message Bubble ─────────────────────────────────────────────────────────── */
+
+.bubble {
+  display: inline-block;
+  max-width: var(--chat-bubble-max-width);
+  padding: var(--chat-padding-y) var(--chat-padding-x);
+  border-radius: var(--chat-bubble-radius);
+  word-break: break-word;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  font-size: 0.9375rem; /* 15px — iMessage default */
+  position: relative;
+}
+
+.bubbleUser {
+  background: var(--chat-bubble-user-bg);
+  color: var(--chat-bubble-user-text);
+  border-bottom-right-radius: var(--chat-bubble-tail-radius);
+  align-self: flex-end;
+}
+
+.bubbleAssistant {
+  background: var(--chat-bubble-assistant-bg);
+  color: var(--chat-bubble-assistant-text);
+  border-bottom-left-radius: var(--chat-bubble-tail-radius);
+  align-self: flex-start;
+}
+
+/* ─── Message Row (wrapper) ──────────────────────────────────────────────────── */
+
+.messageRow {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 4px;
+  padding: 2px 16px;
+}
+
+.messageRowUser {
+  align-items: flex-end;
+}
+
+.messageRowAssistant {
+  align-items: flex-start;
+}
+
+.messageRowSystem {
+  align-items: center;
+  padding: 4px 16px;
+}
+
+/* ─── System Pill ────────────────────────────────────────────────────────────── */
+
+.systemPill {
+  display: inline-block;
+  background: var(--chat-system-bg);
+  color: var(--chat-system-text);
+  padding: 4px 12px;
+  border-radius: 100px;
+  font-size: 0.75rem; /* 12px */
+  text-align: center;
+  max-width: 80%;
+}
+
+/* ─── Timestamp ──────────────────────────────────────────────────────────────── */
+
+.timestamp {
+  font-size: 0.6875rem; /* 11px */
+  color: var(--chat-status-default);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ─── Delivery Status Icons ─────────────────────────────────────────────────── */
+
+.deliveryIcon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.deliveryDefault {
+  color: var(--chat-status-default);
+}
+
+.deliveryRead {
+  color: var(--chat-status-read);
+}
+
+.deliveryError {
+  color: var(--chat-status-error);
+}
+
+/* ─── Typing Indicator ───────────────────────────────────────────────────────── */
+
+.typingBubble {
+  background: var(--chat-bubble-assistant-bg);
+  border-radius: var(--chat-bubble-radius);
+  border-bottom-left-radius: var(--chat-bubble-tail-radius);
+  padding: 12px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.typingDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chat-typing-dot);
+  animation: chatTypingBounce 1.2s ease-in-out infinite;
+}
+
+.typingDot:nth-child(1) { animation-delay: var(--chat-typing-delay-1); }
+.typingDot:nth-child(2) { animation-delay: var(--chat-typing-delay-2); }
+.typingDot:nth-child(3) { animation-delay: var(--chat-typing-delay-3); }
+
+@keyframes chatTypingBounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-6px); }
+}
+
+/* ─── Swipe Reply ────────────────────────────────────────────────────────────── */
+
+.swipeContainer {
+  position: relative;
+  touch-action: pan-y; /* Allow vertical scroll, capture horizontal swipe */
+  user-select: none;
+  transition: transform 0.15s ease-out;
+}
+
+.swipeContainer:active {
+  cursor: grabbing;
+}
+
+.quotePreview {
+  background: rgba(0, 0, 0, 0.06);
+  border-left: 3px solid var(--chat-bubble-user-bg);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  color: var(--chat-status-default);
+  margin-bottom: 4px;
+  max-width: var(--chat-bubble-max-width);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Streaming cursor ───────────────────────────────────────────────────────── */
+
+.streamingCursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: currentColor;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: chatCursorBlink 1s step-end infinite;
+}
+
+@keyframes chatCursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────────────────── */
+
+/* min-width: mobile-first */
+@media (min-width: 640px) {
+  .bubble {
+    font-size: 1rem; /* 16px on wider screens */
+  }
+}

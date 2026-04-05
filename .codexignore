@@ -1,0 +1,7 @@
+# SECURITY LOCKDOWN — Codex is COMPLETELY BLOCKED from this directory
+# DingDawg Agent 1 is proprietary IP — universal agent platform
+# Created 2026-02-17 after IP leak investigation
+
+# Block EVERYTHING
+*
+**/*

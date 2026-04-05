@@ -1,0 +1,168 @@
+# =============================================================================
+# ISG Agent 1 — Agent Configuration
+# =============================================================================
+# Copy to agent.yaml and customize. All values shown are defaults.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Agent Identity
+# ---------------------------------------------------------------------------
+agent:
+  # Human-readable name for this agent instance.
+  name: "ISG Agent 1"
+
+  # Short description shown in status endpoints and the dashboard.
+  description: "Intelligent assistant powered by Innovative Systems Global"
+
+  # Path to the agent's personality/identity markdown file.
+  identity_file: "../config/identity.example.md"
+
+  # Path to the agent's constitution YAML file (Innovation #1).
+  constitution_file: "../config/constitution.example.yaml"
+
+# ---------------------------------------------------------------------------
+# LLM Provider Configuration
+# ---------------------------------------------------------------------------
+llm:
+  # Primary provider: "openai", "anthropic", or "google"
+  primary_provider: "openai"
+
+  # Fallback provider (used if primary is unavailable or rate-limited).
+  fallback_provider: "anthropic"
+
+  # Model selection per provider.
+  models:
+    openai: "gpt-4o"
+    anthropic: "claude-sonnet-4-20250514"
+    google: "gemini-2.0-flash"
+
+  # Temperature for generation (0.0 = deterministic, 1.0 = creative).
+  temperature: 0.7
+
+  # Maximum tokens per response.
+  max_tokens: 4096
+
+  # Request timeout in seconds.
+  timeout_seconds: 60
+
+# ---------------------------------------------------------------------------
+# Memory Configuration
+# ---------------------------------------------------------------------------
+memory:
+  # Maximum number of messages to retain in the conversation window.
+  max_conversation_messages: 50
+
+  # Maximum total tokens in the conversation context.
+  max_context_tokens: 8000
+
+  # Strategy for pruning old messages: "fifo", "summary", or "importance"
+  pruning_strategy: "summary"
+
+  # Whether to persist conversations to the database.
+  persist: true
+
+# ---------------------------------------------------------------------------
+# Skills Configuration
+# ---------------------------------------------------------------------------
+skills:
+  # Directory containing skill packages.
+  directory: "../skills"
+
+  # Skills that are enabled by default (by name from manifest.json).
+  enabled:
+    - "web-search"
+    - "file-manager"
+    - "code-runner"
+    - "reminder"
+
+  # Skills that require explicit user confirmation before execution.
+  require_confirmation:
+    - "code-runner"
+    - "file-manager"
+
+  # Global execution timeout for any single skill invocation (seconds).
+  execution_timeout: 120
+
+# ---------------------------------------------------------------------------
+# Security Configuration
+# ---------------------------------------------------------------------------
+security:
+  # Whether to require the gateway secret for bridge connections.
+  require_gateway_auth: true
+
+  # Whether to require the remote secret for API arming.
+  require_remote_auth: true
+
+  # Rate limiting: maximum requests per minute per client.
+  rate_limit_per_minute: 60
+
+  # Maximum request body size in bytes (default: 1 MB).
+  max_request_body_bytes: 1048576
+
+  # IP allowlist (empty = allow all). CIDR notation supported.
+  ip_allowlist: []
+
+  # Content filtering: block messages matching these patterns.
+  blocked_patterns: []
+
+# ---------------------------------------------------------------------------
+# Server Configuration
+# ---------------------------------------------------------------------------
+server:
+  # Host to bind the gateway server to.
+  host: "0.0.0.0"
+
+  # Port for the gateway HTTP/WebSocket server.
+  port: 8080
+
+  # Log level: "debug", "info", "warning", "error", "critical"
+  log_level: "info"
+
+  # CORS allowed origins (empty = no CORS headers).
+  cors_origins:
+    - "http://localhost:3000"
+
+  # WebSocket ping interval in seconds.
+  ws_ping_interval: 30
+
+  # WebSocket ping timeout in seconds.
+  ws_ping_timeout: 10
+
+# ---------------------------------------------------------------------------
+# Database Configuration
+# ---------------------------------------------------------------------------
+database:
+  # Path to the SQLite database file.
+  path: "./data/isg_agent.db"
+
+  # Whether to run migrations on startup.
+  auto_migrate: true
+
+  # SQLite WAL mode for concurrent reads.
+  wal_mode: true
+
+# ---------------------------------------------------------------------------
+# Dashboard Configuration
+# ---------------------------------------------------------------------------
+dashboard:
+  # Whether to serve the dashboard from the gateway.
+  enabled: true
+
+  # Port for the dashboard (if served separately).
+  port: 3000
+
+# ---------------------------------------------------------------------------
+# Logging Configuration
+# ---------------------------------------------------------------------------
+logging:
+  # Log format: "json" or "text"
+  format: "json"
+
+  # Log file path (null = stdout only).
+  file: null
+
+  # Maximum log file size before rotation (bytes).
+  max_file_size: 10485760
+
+  # Number of rotated log files to keep.
+  backup_count: 5

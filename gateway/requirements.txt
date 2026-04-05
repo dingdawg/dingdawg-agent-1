@@ -1,0 +1,17 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+websockets==13.1
+pydantic==2.10.4
+pydantic-settings==2.7.1
+PyYAML==6.0.2
+aiosqlite==0.20.0
+httpx==0.28.1
+python-jose[cryptography]==3.3.0
+openai==1.58.1
+anthropic==0.42.0
+slowapi==0.1.9
+google-api-python-client>=2.100.0
+google-auth-oauthlib>=1.2.0
+google-auth>=2.25.0
+sentry-sdk[fastapi]==2.19.2
+pyotp==2.9.0

@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "workspaces": ["bridges", "dashboard"],
+  "scripts": {
+    "build:bridges": "npm -w bridges run build",
+    "build:dashboard": "npm -w dashboard run build",
+    "test:bridges": "npm -w bridges run test",
+    "test:dashboard": "npm -w dashboard run test"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.jr33377/dingdawg-agent-platform",
+  "title": "DingDawg Agent Platform",
+  "description": "AI agent platform for businesses. Claim your @handle, deploy a governed AI agent in minutes. 16 universal skills, 38 templates across 8 industry verticals (personal, business, B2B, A2A, compliance, enterprise, health, gaming). Multi-channel delivery via voice, SMS, email, and web widget. MCP/A2A/UCP protocol support with enterprise RBAC and audit logging.",
+  "websiteUrl": "https://dingdawg.com",
+  "repository": {
+    "url": "https://github.com/jr33377/DingDawg-Agent-1",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://api.dingdawg.com/api/v1/sessions"
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "provider": "DingDawg Inc.",
+      "protocols": ["mcp/1.0", "a2a/0.3", "ucp/1.0"],
+      "authentication": "bearer",
+      "sectors": ["personal", "business", "b2b", "a2a", "compliance", "enterprise", "health", "gaming"],
+      "skillCount": 16,
+      "templateCount": 38,
+      "deployedAt": "railway"
+    }
+  }
+}

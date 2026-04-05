@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#F6B400" />
+  <title>DingDawg — You're Offline</title>
+  <style>
+    /* =========================================================
+     * DingDawg offline page — dark theme, mobile-first
+     * No external dependencies. Fully self-contained.
+     * ========================================================= */
+    :root {
+      --ink-950: #07111c;
+      --ink-900: #0a1624;
+      --ink-800: #0f2133;
+      --gold: #F6B400;
+      --gold-light: #FFD54F;
+      --white: #ffffff;
+      --muted: #94a3b8;
+      --stroke: rgba(255, 255, 255, 0.08);
+      --radius-lg: 16px;
+      --radius-md: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+    }
+
+    body {
+      background-color: var(--ink-950);
+      color: var(--white);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "DM Sans",
+        Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      /* Safe area insets for notched phones */
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    .page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px;
+      text-align: center;
+    }
+
+    /* Logo mark */
+    .logo-wrap {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, var(--ink-800) 0%, var(--ink-900) 100%);
+      border: 1px solid rgba(246, 180, 0, 0.25);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      box-shadow: 0 0 40px rgba(246, 180, 0, 0.08);
+    }
+
+    .logo-text {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: var(--gold);
+    }
+
+    /* Offline icon */
+    .offline-icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 20px;
+      opacity: 0.7;
+    }
+
+    .offline-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Heading */
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--white);
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      font-size: 15px;
+      color: var(--muted);
+      max-width: 320px;
+      margin: 0 auto 32px;
+      line-height: 1.7;
+    }
+
+    /* Retry button — 44px+ touch target */
+    .btn-retry {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 52px;
+      padding: 14px 32px;
+      background: var(--gold);
+      color: var(--ink-950);
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s ease, transform 0.1s ease;
+      -webkit-tap-highlight-color: transparent;
+      letter-spacing: 0.01em;
+    }
+
+    .btn-retry:hover {
+      background: var(--gold-light);
+    }
+
+    .btn-retry:active {
+      transform: scale(0.97);
+    }
+
+    /* Status indicator */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 18px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 100px;
+      margin-bottom: 32px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      animation: pulse 2s infinite;
+    }
+
+    .status-label {
+      font-size: 13px;
+      color: #fca5a5;
+      font-weight: 500;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Cached data section */
+    .cached-section {
+      margin-top: 40px;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .cached-title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .cached-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .cached-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      background: var(--ink-800);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius-md);
+      text-decoration: none;
+      color: var(--white);
+      min-height: 52px;
+      transition: border-color 0.15s ease;
+    }
+
+    .cached-item:hover {
+      border-color: rgba(246, 180, 0, 0.3);
+    }
+
+    .cached-item-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(246, 180, 0, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 16px;
+    }
+
+    .cached-item-text {
+      flex: 1;
+    }
+
+    .cached-item-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--white);
+    }
+
+    .cached-item-meta {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* Divider */
+    .divider {
+      width: 100%;
+      max-width: 400px;
+      height: 1px;
+      background: var(--stroke);
+      margin: 32px auto;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: auto;
+      padding-top: 32px;
+      font-size: 12px;
+      color: var(--muted);
+      opacity: 0.6;
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      .status-dot {
+        animation: none;
+      }
+      .btn-retry {
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" role="main">
+    <!-- Brand -->
+    <div class="logo-wrap" aria-hidden="true">
+      <span class="logo-text">DD</span>
+    </div>
+
+    <!-- Offline status badge -->
+    <div class="status-bar" role="status" aria-live="polite">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span class="status-label">No internet connection</span>
+    </div>
+
+    <!-- Offline icon (cloud-slash SVG, inline, no external dep) -->
+    <div class="offline-icon" aria-hidden="true">
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M52 28a16 16 0 0 0-28.5-8" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
+        <path d="M12 36a10 10 0 0 0 4.5 18.5H46a10 10 0 0 0 4-19.5" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
+        <line x1="10" y1="10" x2="54" y2="54" stroke="#F6B400" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </div>
+
+    <!-- Heading -->
+    <h1>You're offline</h1>
+    <p class="subtitle">
+      Check your internet connection and try again.
+      Some cached content may still be available below.
+    </p>
+
+    <!-- Retry button -->
+    <button
+      class="btn-retry"
+      onclick="window.location.reload()"
+      type="button"
+      aria-label="Retry connection and reload page"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M13.65 2.35A8 8 0 1 0 15 8h-2a6 6 0 1 1-1.05-3.4L9.5 7H14V2.5l-.35-.15z"/>
+      </svg>
+      Try Again
+    </button>
+
+    <div class="divider" role="separator" aria-hidden="true"></div>
+
+    <!-- Cached pages — quick navigation to app shell pages -->
+    <section class="cached-section" aria-label="Available offline pages">
+      <p class="cached-title">Available offline</p>
+      <nav class="cached-list" aria-label="Cached pages">
+        <a href="/" class="cached-item" aria-label="Go to home page">
+          <div class="cached-item-icon" aria-hidden="true">🏠</div>
+          <div class="cached-item-text">
+            <div class="cached-item-name">Home</div>
+            <div class="cached-item-meta">May load from cache</div>
+          </div>
+        </a>
+        <a href="/dashboard" class="cached-item" aria-label="Go to your agents dashboard">
+          <div class="cached-item-icon" aria-hidden="true">🤖</div>
+          <div class="cached-item-text">
+            <div class="cached-item-name">My Agents</div>
+            <div class="cached-item-meta">View cached agents</div>
+          </div>
+        </a>
+        <a href="/explore" class="cached-item" aria-label="Explore agent templates">
+          <div class="cached-item-icon" aria-hidden="true">🔍</div>
+          <div class="cached-item-text">
+            <div class="cached-item-name">Explore</div>
+            <div class="cached-item-meta">Browse templates offline</div>
+          </div>
+        </a>
+      </nav>
+    </section>
+
+    <footer>
+      <p>DingDawg — Universal AI Agent Platform</p>
+    </footer>
+  </main>
+
+  <script>
+    // When online again, redirect to homepage automatically
+    window.addEventListener("online", function () {
+      window.location.href = "/";
+    });
+  </script>
+</body>
+</html>

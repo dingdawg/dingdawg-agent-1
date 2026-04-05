@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: isg-agent-gateway
+    ports:
+      - "${ISG_PORT:-8080}:8080"
+    env_file:
+      - .env
+    volumes:
+      - agent-data:/app/data
+      - ./config:/app/config:ro
+      - ./skills:/app/skills:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8080/health').raise_for_status()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  bridges:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridges
+    container_name: isg-agent-bridges
+    env_file:
+      - .env
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: isg-agent-dashboard
+    ports:
+      - "${ISG_DASHBOARD_PORT:-3000}:3000"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  agent-data:
+    driver: local

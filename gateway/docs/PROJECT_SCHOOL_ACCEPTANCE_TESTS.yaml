@@ -1,0 +1,366 @@
+# Project School — Product Acceptance Tests
+# Version: 1.0 | Last Updated: 2026-02-19
+# Purpose: Executable user journeys with binary pass/fail criteria.
+# Project School is a homeschool platform for families.
+# Two user types: PARENT (manages child's education) and STUDENT (learns).
+
+product: "Project School"
+version: "1.0"
+last_updated: "2026-02-19"
+
+# ---------------------------------------------------------------------------
+# THREE LAWS OF COMMERCIAL READINESS
+# ---------------------------------------------------------------------------
+three_laws_check:
+  law_1_stranger_test: "Can a parent who found this online get their child learning without calling support?"
+  law_2_user_perceives: "Does the parent see their child progressing? Does the student see what to learn next?"
+  law_3_first_five_minutes: "Within 5 minutes of signup, is the child doing their first lesson?"
+
+# ---------------------------------------------------------------------------
+# JOBS-TO-BE-DONE
+# ---------------------------------------------------------------------------
+jobs_to_be_done:
+  parent: "I want my child to get education I trust without me being a teacher. I want to feel like a good parent."
+  student: "I want to learn things that are interesting and not too hard or too easy. I want to feel smart."
+
+# ---------------------------------------------------------------------------
+# USER JOURNEYS
+# ---------------------------------------------------------------------------
+journeys:
+
+  # =========================================================================
+  # J001: Parent signs up and onboards child (P0)
+  # =========================================================================
+  - id: "J001"
+    name: "Parent creates account and sets up child's profile"
+    priority: "P0"
+    persona: "PARENT"
+    law_tested: "LAW 3 — First 5 minutes must end with child learning"
+    preconditions:
+      - "Parent has email and knows child's grade level"
+    steps:
+      - step: 1
+        action: "Navigate to landing page"
+        expected: "Clear value proposition for homeschool families, pricing visible, signup CTA"
+        verify_binary: "Page loads < 2500ms AND price shown AND signup button visible"
+      - step: 2
+        action: "Click signup"
+        expected: "Registration form: email, password, name (3 fields or fewer)"
+        verify_binary: "Form renders AND field count <= 3 AND submit button visible"
+      - step: 3
+        action: "Complete registration"
+        expected: "Account created, onboarding wizard begins automatically"
+        verify_binary: "HTTP 2xx from /api/auth/register AND redirect to onboarding"
+      - step: 4
+        action: "Set up parent profile"
+        expected: "Name, contact info, homeschool goals"
+        verify_binary: "Profile form renders AND data saves on submit AND progress indicator shown"
+      - step: 5
+        action: "Add student profile"
+        expected: "Child's name, grade level, any special needs or accommodations"
+        verify_binary: "Student form renders AND grade selector works AND accommodations optional"
+      - step: 6
+        action: "Select curriculum preferences"
+        expected: "Standards selection (state standards or general), subject preferences"
+        verify_binary: "At least 2 standards options AND subject selection works AND defaults to state"
+      - step: 7
+        action: "Complete onboarding"
+        expected: "Placement assessment starts OR daily schedule generated"
+        verify_binary: "Redirect to student interface OR placement test AND no blank screen"
+    success_criteria: "Parent goes from landing page to child's first lesson in under 10 minutes"
+    failure_means: "Parent gives up during setup. They go back to Khan Academy."
+    current_status: "PARTIAL — 18-page onboarding exists, backend APIs work, but frontend-backend wiring has 6 path mismatches and port mismatch"
+
+  # =========================================================================
+  # J002: Student completes a daily lesson (P0)
+  # =========================================================================
+  - id: "J002"
+    name: "Student completes their daily learning session"
+    priority: "P0"
+    persona: "STUDENT"
+    law_tested: "LAW 2 — Student must feel progress, not confusion"
+    preconditions:
+      - "Student has been onboarded and has a daily schedule"
+    steps:
+      - step: 1
+        action: "Student opens the app"
+        expected: "Daily schedule visible with today's lessons listed"
+        verify_binary: "Schedule renders AND at least 1 lesson shown AND subject labels visible"
+      - step: 2
+        action: "Click on first lesson"
+        expected: "Lesson content loads: topic, explanation, practice questions"
+        verify_binary: "Lesson content renders AND topic visible AND questions present AND no empty state"
+      - step: 3
+        action: "Read the lesson content"
+        expected: "Content is grade-appropriate, engaging, and clearly formatted"
+        verify_binary: "Content text > 50 words AND reading level appropriate AND images/diagrams if applicable"
+      - step: 4
+        action: "Answer a practice question"
+        expected: "Immediate feedback: correct/incorrect with explanation"
+        verify_binary: "Feedback shown < 2000ms AND explanation present AND next question available"
+      - step: 5
+        action: "Complete all questions in the lesson"
+        expected: "Lesson completion screen with score, encouragement, next steps"
+        verify_binary: "Score shown AND encouraging message AND 'next lesson' button AND progress updated"
+      - step: 6
+        action: "Return to daily schedule"
+        expected: "Completed lesson marked as done, next lesson highlighted"
+        verify_binary: "Completed lesson has checkmark/done indicator AND next lesson is visually prominent"
+    success_criteria: "Student completes a full lesson cycle (read, answer, feedback, progress) in under 15 minutes"
+    failure_means: "Core product loop is broken. Student has no reason to come back tomorrow."
+    current_status: "PARTIAL — 12,350 questions in DB, lesson delivery works via chat, but progression chain had 3 breaks (fixed in S155), module rendering not fully wired"
+
+  # =========================================================================
+  # J003: Parent views child's progress (P0)
+  # =========================================================================
+  - id: "J003"
+    name: "Parent checks child's learning progress"
+    priority: "P0"
+    persona: "PARENT"
+    law_tested: "LAW 2 — Parent must see evidence their money is well spent"
+    preconditions:
+      - "Student has completed at least 3 lessons"
+    steps:
+      - step: 1
+        action: "Navigate to parent dashboard"
+        expected: "Dashboard shows summary: lessons completed, subjects covered, mastery levels"
+        verify_binary: "Dashboard renders AND lesson count shown AND at least 1 subject with mastery level"
+      - step: 2
+        action: "View detailed subject progress"
+        expected: "Per-subject breakdown: standards met, areas needing work, recent scores"
+        verify_binary: "Subject detail page renders AND standards listed AND scores visible"
+      - step: 3
+        action: "View weekly report"
+        expected: "Summary of what child learned this week, time spent, improvement areas"
+        verify_binary: "Report generates AND covers current week AND shows time data AND improvement suggestions"
+    success_criteria: "Parent understands child's academic progress in under 2 minutes"
+    failure_means: "Parent can't see if it's working. They cancel after the trial."
+    current_status: "PARTIAL — parent dashboard exists (664 lines, PIN-protected), but progress data pipeline incomplete"
+
+  # =========================================================================
+  # J004: 3-Question Buffer (proprietary learning engine) (P0)
+  # =========================================================================
+  - id: "J004"
+    name: "Adaptive learning adjusts to student ability"
+    priority: "P0"
+    persona: "STUDENT"
+    law_tested: "LAW 2 — Student must feel lessons are 'just right' difficulty"
+    preconditions:
+      - "Student has completed at least 1 lesson"
+      - "Buffer engine is active"
+    steps:
+      - step: 1
+        action: "Student gets first question"
+        expected: "Question is at appropriate difficulty for their assessed level"
+        verify_binary: "Question renders AND difficulty tag matches student level AND not too easy/hard"
+      - step: 2
+        action: "Student answers correctly 3 times in a row"
+        expected: "Difficulty increases for next question"
+        verify_binary: "Next question difficulty > previous AND mastery indicator advances"
+      - step: 3
+        action: "Student answers incorrectly"
+        expected: "Explanation provided, next question targets the same concept at easier level"
+        verify_binary: "Explanation shown AND next question is same topic AND difficulty <= previous"
+      - step: 4
+        action: "Complete buffer cycle"
+        expected: "Mastery assessment updates, student progresses or gets reinforcement"
+        verify_binary: "Mastery level updated AND progress recorded AND next lesson adjusted"
+    success_criteria: "Buffer engine adapts difficulty in real-time, student never stuck or bored"
+    failure_means: "Without adaptive learning, this is just a PDF with questions. No moat."
+    current_status: "PARTIAL — buffer engine exists with API endpoints (trigger/submit/status), contract adapter built, but full chain not E2E verified"
+
+  # =========================================================================
+  # J005: Parent subscribes and pays (P0)
+  # =========================================================================
+  - id: "J005"
+    name: "Parent subscribes to Project School"
+    priority: "P0"
+    persona: "PARENT"
+    law_tested: "LAW 2 — Price and value must be crystal clear"
+    preconditions:
+      - "Parent has completed onboarding"
+      - "Trial period context established"
+    steps:
+      - step: 1
+        action: "See pricing information"
+        expected: "Monthly price clearly shown, what's included, comparison to alternatives"
+        verify_binary: "Dollar amount visible AND feature list AND no hidden fees"
+      - step: 2
+        action: "Click subscribe"
+        expected: "Payment form appears, Stripe checkout loads"
+        verify_binary: "Stripe form renders AND card input visible AND total matches displayed price"
+      - step: 3
+        action: "Enter payment and submit"
+        expected: "Subscription confirmed, full access unlocked immediately"
+        verify_binary: "HTTP 2xx AND subscription status active AND all features accessible"
+      - step: 4
+        action: "Receive confirmation"
+        expected: "Email confirmation with receipt and next steps"
+        verify_binary: "Confirmation UI shown AND subscription details visible in account"
+    success_criteria: "Parent subscribes in under 60 seconds after deciding to pay"
+    failure_means: "No revenue. $12M ARR goal impossible."
+    current_status: "FAIL — no payment UI, pricing page not built, Stripe not integrated in frontend"
+
+  # =========================================================================
+  # J006: PWA installation (P1)
+  # =========================================================================
+  - id: "J006"
+    name: "Parent installs app on family tablet"
+    priority: "P1"
+    persona: "PARENT"
+    law_tested: "LAW 1 — Must feel like a real education app"
+    preconditions:
+      - "Device is tablet or phone"
+      - "HTTPS enabled"
+    steps:
+      - step: 1
+        action: "Visit site on tablet browser"
+        expected: "Install prompt or Add to Home Screen available"
+        verify_binary: "manifest.json loads AND service worker registered AND icons defined"
+      - step: 2
+        action: "Install the app"
+        expected: "App appears on home screen as 'Project School'"
+        verify_binary: "192px + 512px icons AND app name correct AND standalone display"
+      - step: 3
+        action: "Child opens app from home screen"
+        expected: "Launches to student dashboard, no login needed if session valid"
+        verify_binary: "No browser chrome AND auto-login if token valid AND daily schedule visible"
+    success_criteria: "Family can use Project School like a native education app on their tablet"
+    failure_means: "Violates PERMANENT RULE #14 — all products are PWA."
+    current_status: "FAIL — no PWA configuration"
+
+  # =========================================================================
+  # J007: Parent manages multiple children (P2)
+  # =========================================================================
+  - id: "J007"
+    name: "Parent manages multiple student profiles"
+    priority: "P2"
+    persona: "PARENT"
+    law_tested: "LAW 1 — Common homeschool family scenario"
+    preconditions:
+      - "Parent has 2+ children to enroll"
+    steps:
+      - step: 1
+        action: "Navigate to student management"
+        expected: "List of existing students, option to add new student"
+        verify_binary: "Student list renders AND 'add student' button visible"
+      - step: 2
+        action: "Add second child"
+        expected: "Same setup flow as first child (name, grade, accommodations)"
+        verify_binary: "Form renders AND grade selector AND accommodations AND saves correctly"
+      - step: 3
+        action: "Switch between children's dashboards"
+        expected: "Each child has independent progress, schedule, and mastery data"
+        verify_binary: "Different data per child AND no data bleed AND switcher works"
+    success_criteria: "Parent can manage all children from a single account"
+    failure_means: "Multi-child families need multiple accounts. That's a dealbreaker for homeschool families."
+    current_status: "PARTIAL — student profile CRUD exists, but multi-student switching not built in frontend"
+
+  # =========================================================================
+  # J008: Accommodations actually affect content (P1)
+  # =========================================================================
+  - id: "J008"
+    name: "Accommodations personalize the learning experience"
+    priority: "P1"
+    persona: "PARENT + STUDENT"
+    law_tested: "LAW 2 — Collected data must produce visible effect"
+    preconditions:
+      - "Parent has set accommodations (e.g., dyslexia, ADHD, gifted)"
+    steps:
+      - step: 1
+        action: "Parent sets accommodation flags"
+        expected: "Accommodation options saved, confirmation shown"
+        verify_binary: "Accommodations saved to DB AND confirmation message shown"
+      - step: 2
+        action: "Student starts a lesson"
+        expected: "Content delivery reflects accommodations (e.g., larger text, shorter passages, extended time)"
+        verify_binary: "At least 1 visible difference from default delivery AND accommodation tag in content metadata"
+      - step: 3
+        action: "Parent checks that accommodations are working"
+        expected: "Dashboard shows which accommodations are active and how they affect lessons"
+        verify_binary: "Active accommodations listed AND at least 1 measurable effect shown"
+    success_criteria: "Accommodations collected during onboarding produce visible changes in student experience"
+    failure_means: "Collecting data without using it breaks trust. Parents feel deceived."
+    current_status: "FAIL — accommodations collected but NEVER applied to content delivery (identified S151)"
+
+# ---------------------------------------------------------------------------
+# PERFORMANCE THRESHOLDS
+# ---------------------------------------------------------------------------
+performance_thresholds:
+  lcp_max_ms: 2500
+  inp_max_ms: 200
+  cls_max: 0.1
+  api_p95_ms: 500
+  button_feedback_ms: 100
+  page_load_max_ms: 3000
+  lesson_load_max_ms: 2000
+  question_feedback_max_ms: 2000
+  time_to_first_lesson_min: 10    # From signup to first lesson content
+
+# ---------------------------------------------------------------------------
+# MOBILE REQUIREMENTS
+# ---------------------------------------------------------------------------
+mobile_requirements:
+  min_width_px: 375
+  touch_target_min_px: 44
+  pwa_installable: true
+  offline_support: true
+  no_horizontal_scroll: true
+  standalone_display: true
+  tablet_optimized: true          # Primary device for many homeschool families
+
+# ---------------------------------------------------------------------------
+# BILLING REQUIREMENTS
+# ---------------------------------------------------------------------------
+billing_requirements:
+  price_visible_before_signup: true
+  trial_period_clear: true            # How long, what's included, what happens after
+  payment_flow_max_seconds: 60
+  cancellation_max_clicks: 3
+  self_service_cancellation: true
+
+# ---------------------------------------------------------------------------
+# EDUCATION-SPECIFIC REQUIREMENTS
+# ---------------------------------------------------------------------------
+education_requirements:
+  standards_alignment_visible: true    # Parent can see which standards are being met
+  progress_data_exportable: true       # For portfolio/reporting requirements
+  grade_appropriate_content: true      # Content matches student's assessed level
+  no_inappropriate_content: true       # Content governance gate enforced
+  accommodations_affect_delivery: true # Collected accommodations produce visible changes
+
+# ---------------------------------------------------------------------------
+# POLISH REQUIREMENTS
+# ---------------------------------------------------------------------------
+polish_requirements:
+  zero_console_errors: true
+  custom_404_page: true
+  custom_500_page: true
+  loading_states_on_all_async: true
+  no_programmer_jargon_in_ui: true
+  empty_states_with_cta: true
+  skeleton_screens_not_spinners: true
+  inline_form_validation: true
+  child_friendly_language: true        # Student-facing content uses age-appropriate language
+
+# ---------------------------------------------------------------------------
+# OPERATIONS REQUIREMENTS
+# ---------------------------------------------------------------------------
+operations_requirements:
+  health_endpoint_with_deps: true
+  monitoring_dashboard: true
+  alerting_on_5xx: true
+  rollback_under_5_minutes: true
+  automated_daily_backups: true
+  content_quality_gate_active: true
+
+# ---------------------------------------------------------------------------
+# CURRENT OVERALL STATUS
+# ---------------------------------------------------------------------------
+current_status:
+  journeys_passing: 0
+  journeys_total: 8
+  p0_passing: 0
+  p0_total: 5
+  customer_readiness: "0/8 journeys pass end-to-end. Backend 8.5/10 but frontend-backend gap is critical."
+  next_action: "Fix port mismatch (8001->8000), fix 6 API path mismatches, then verify J001 (parent onboarding) end-to-end."

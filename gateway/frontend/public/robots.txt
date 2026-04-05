@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /billing
+Disallow: /admin
+Disallow: /api/
+Disallow: /auth/
+Disallow: /verify-email/
+Disallow: /reset-password/
+Disallow: /forgot-password/
+Disallow: /chat
+Disallow: /operations/
+Disallow: /tasks
+Disallow: /analytics
+Disallow: /onboarding/
+Sitemap: https://app.dingdawg.com/sitemap.xml

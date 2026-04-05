@@ -1,0 +1,341 @@
+{
+  "name": "DingDawg Agent 1",
+  "description": "Connect your DingDawg AI business agent to 6000+ apps. Automate appointments, invoicing, contacts, notifications, and more.",
+  "version": "1.0.0",
+  "platformVersion": "15.6.1",
+  "authentication": {
+    "type": "custom",
+    "test": {
+      "url": "{{BASE_URL}}/api/v1/zapier/auth/test",
+      "method": "GET",
+      "headers": {
+        "X-API-Key": "{{api_key}}"
+      }
+    },
+    "fields": [
+      {
+        "key": "api_key",
+        "label": "API Key",
+        "type": "string",
+        "required": true,
+        "helpText": "Your DingDawg MCP API key. Generate one in your DingDawg dashboard under Settings > API Keys."
+      },
+      {
+        "key": "base_url",
+        "label": "API URL",
+        "type": "string",
+        "required": false,
+        "default": "https://app.dingdawg.com",
+        "helpText": "The DingDawg Agent 1 API URL. Use the default unless you have a custom deployment."
+      }
+    ]
+  },
+  "triggers": {
+    "new_appointment": {
+      "key": "new_appointment",
+      "noun": "Appointment",
+      "display": {
+        "label": "New Appointment",
+        "description": "Triggers when a new appointment is scheduled for your agent."
+      },
+      "operation": {
+        "type": "polling",
+        "perform": {
+          "url": "{{BASE_URL}}/api/v1/zapier/triggers/new_appointment",
+          "method": "GET",
+          "params": {
+            "agent_handle": "{{agent_handle}}"
+          },
+          "headers": {
+            "X-API-Key": "{{api_key}}"
+          }
+        },
+        "inputFields": [
+          {
+            "key": "agent_handle",
+            "label": "Agent Handle",
+            "type": "string",
+            "required": false,
+            "helpText": "Filter appointments by agent handle (e.g. joes-pizza). Leave blank for all agents."
+          }
+        ],
+        "outputFields": [
+          {"key": "id", "label": "Appointment ID"},
+          {"key": "contact_name", "label": "Contact Name"},
+          {"key": "contact_email", "label": "Contact Email"},
+          {"key": "title", "label": "Title"},
+          {"key": "start_time", "label": "Start Time"},
+          {"key": "end_time", "label": "End Time"},
+          {"key": "status", "label": "Status"},
+          {"key": "created_at", "label": "Created At"}
+        ]
+      }
+    },
+    "new_invoice": {
+      "key": "new_invoice",
+      "noun": "Invoice",
+      "display": {
+        "label": "New Invoice",
+        "description": "Triggers when a new invoice is created for your agent."
+      },
+      "operation": {
+        "type": "polling",
+        "perform": {
+          "url": "{{BASE_URL}}/api/v1/zapier/triggers/new_invoice",
+          "method": "GET",
+          "params": {
+            "agent_handle": "{{agent_handle}}"
+          },
+          "headers": {
+            "X-API-Key": "{{api_key}}"
+          }
+        },
+        "inputFields": [
+          {
+            "key": "agent_handle",
+            "label": "Agent Handle",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "outputFields": [
+          {"key": "id", "label": "Invoice ID"},
+          {"key": "invoice_number", "label": "Invoice Number"},
+          {"key": "client_name", "label": "Client Name"},
+          {"key": "total_cents", "label": "Total (cents)"},
+          {"key": "status", "label": "Status"},
+          {"key": "due_date", "label": "Due Date"},
+          {"key": "created_at", "label": "Created At"}
+        ]
+      }
+    },
+    "new_contact": {
+      "key": "new_contact",
+      "noun": "Contact",
+      "display": {
+        "label": "New Contact",
+        "description": "Triggers when a new contact is added to your agent's CRM."
+      },
+      "operation": {
+        "type": "polling",
+        "perform": {
+          "url": "{{BASE_URL}}/api/v1/zapier/triggers/new_contact",
+          "method": "GET",
+          "params": {
+            "agent_handle": "{{agent_handle}}"
+          },
+          "headers": {
+            "X-API-Key": "{{api_key}}"
+          }
+        },
+        "inputFields": [
+          {
+            "key": "agent_handle",
+            "label": "Agent Handle",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "outputFields": [
+          {"key": "id", "label": "Contact ID"},
+          {"key": "name", "label": "Name"},
+          {"key": "email", "label": "Email"},
+          {"key": "phone", "label": "Phone"},
+          {"key": "company", "label": "Company"},
+          {"key": "source", "label": "Source"},
+          {"key": "created_at", "label": "Created At"}
+        ]
+      }
+    },
+    "new_message": {
+      "key": "new_message",
+      "noun": "Message",
+      "display": {
+        "label": "New Message/Notification",
+        "description": "Triggers when a new notification is queued for your agent."
+      },
+      "operation": {
+        "type": "polling",
+        "perform": {
+          "url": "{{BASE_URL}}/api/v1/zapier/triggers/new_message",
+          "method": "GET",
+          "params": {
+            "agent_handle": "{{agent_handle}}"
+          },
+          "headers": {
+            "X-API-Key": "{{api_key}}"
+          }
+        },
+        "inputFields": [
+          {
+            "key": "agent_handle",
+            "label": "Agent Handle",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "outputFields": [
+          {"key": "id", "label": "Notification ID"},
+          {"key": "channel", "label": "Channel"},
+          {"key": "recipient", "label": "Recipient"},
+          {"key": "subject", "label": "Subject"},
+          {"key": "body", "label": "Body"},
+          {"key": "status", "label": "Status"},
+          {"key": "created_at", "label": "Created At"}
+        ]
+      }
+    }
+  },
+  "actions": {
+    "book_appointment": {
+      "key": "book_appointment",
+      "noun": "Appointment",
+      "display": {
+        "label": "Book Appointment",
+        "description": "Schedule a new appointment for your business agent."
+      },
+      "operation": {
+        "perform": {
+          "url": "{{BASE_URL}}/api/v1/zapier/actions/book_appointment",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json",
+            "X-API-Key": "{{api_key}}"
+          },
+          "body": {
+            "agent_handle": "{{agent_handle}}",
+            "contact_name": "{{contact_name}}",
+            "contact_email": "{{contact_email}}",
+            "contact_phone": "{{contact_phone}}",
+            "title": "{{title}}",
+            "start_time": "{{start_time}}",
+            "end_time": "{{end_time}}",
+            "description": "{{description}}",
+            "location": "{{location}}"
+          }
+        },
+        "inputFields": [
+          {"key": "agent_handle", "label": "Agent Handle", "type": "string", "required": true, "helpText": "Your agent handle (e.g. joes-pizza)"},
+          {"key": "contact_name", "label": "Contact Name", "type": "string", "required": true},
+          {"key": "contact_email", "label": "Contact Email", "type": "string", "required": false},
+          {"key": "contact_phone", "label": "Contact Phone", "type": "string", "required": false},
+          {"key": "title", "label": "Appointment Title", "type": "string", "required": true},
+          {"key": "start_time", "label": "Start Time", "type": "datetime", "required": true},
+          {"key": "end_time", "label": "End Time", "type": "datetime", "required": false},
+          {"key": "description", "label": "Description", "type": "text", "required": false},
+          {"key": "location", "label": "Location", "type": "string", "required": false}
+        ]
+      }
+    },
+    "create_invoice": {
+      "key": "create_invoice",
+      "noun": "Invoice",
+      "display": {
+        "label": "Create Invoice",
+        "description": "Create a new invoice for a client."
+      },
+      "operation": {
+        "perform": {
+          "url": "{{BASE_URL}}/api/v1/zapier/actions/create_invoice",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json",
+            "X-API-Key": "{{api_key}}"
+          },
+          "body": {
+            "agent_handle": "{{agent_handle}}",
+            "client_name": "{{client_name}}",
+            "client_email": "{{client_email}}",
+            "line_items": "{{line_items}}",
+            "tax_rate": "{{tax_rate}}",
+            "due_date": "{{due_date}}",
+            "currency": "{{currency}}",
+            "notes": "{{notes}}"
+          }
+        },
+        "inputFields": [
+          {"key": "agent_handle", "label": "Agent Handle", "type": "string", "required": true},
+          {"key": "client_name", "label": "Client Name", "type": "string", "required": true},
+          {"key": "client_email", "label": "Client Email", "type": "string", "required": false},
+          {"key": "line_items", "label": "Line Items (JSON)", "type": "text", "required": true, "helpText": "JSON array of items: [{\"description\": \"Service\", \"quantity\": 1, \"unit_price_cents\": 5000}]"},
+          {"key": "tax_rate", "label": "Tax Rate", "type": "number", "required": false, "helpText": "Decimal (e.g. 0.08 for 8%)"},
+          {"key": "due_date", "label": "Due Date", "type": "datetime", "required": false},
+          {"key": "currency", "label": "Currency", "type": "string", "required": false, "default": "USD"},
+          {"key": "notes", "label": "Notes", "type": "text", "required": false}
+        ]
+      }
+    },
+    "send_message": {
+      "key": "send_message",
+      "noun": "Message",
+      "display": {
+        "label": "Send Message/Notification",
+        "description": "Send an email, SMS, or push notification through your agent."
+      },
+      "operation": {
+        "perform": {
+          "url": "{{BASE_URL}}/api/v1/zapier/actions/send_message",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json",
+            "X-API-Key": "{{api_key}}"
+          },
+          "body": {
+            "agent_handle": "{{agent_handle}}",
+            "channel": "{{channel}}",
+            "recipient": "{{recipient}}",
+            "subject": "{{subject}}",
+            "body": "{{body}}",
+            "priority": "{{priority}}"
+          }
+        },
+        "inputFields": [
+          {"key": "agent_handle", "label": "Agent Handle", "type": "string", "required": true},
+          {"key": "channel", "label": "Channel", "type": "string", "required": true, "choices": ["email", "sms", "push", "webhook"]},
+          {"key": "recipient", "label": "Recipient", "type": "string", "required": true, "helpText": "Email address or phone number"},
+          {"key": "subject", "label": "Subject", "type": "string", "required": false},
+          {"key": "body", "label": "Message Body", "type": "text", "required": true},
+          {"key": "priority", "label": "Priority", "type": "string", "required": false, "default": "normal", "choices": ["low", "normal", "high", "urgent"]}
+        ]
+      }
+    },
+    "create_contact": {
+      "key": "create_contact",
+      "noun": "Contact",
+      "display": {
+        "label": "Create Contact",
+        "description": "Add a new contact to your agent's CRM."
+      },
+      "operation": {
+        "perform": {
+          "url": "{{BASE_URL}}/api/v1/zapier/actions/create_contact",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json",
+            "X-API-Key": "{{api_key}}"
+          },
+          "body": {
+            "agent_handle": "{{agent_handle}}",
+            "name": "{{name}}",
+            "email": "{{email}}",
+            "phone": "{{phone}}",
+            "company": "{{company}}",
+            "tags": "{{tags}}",
+            "notes": "{{notes}}",
+            "source": "{{source}}"
+          }
+        },
+        "inputFields": [
+          {"key": "agent_handle", "label": "Agent Handle", "type": "string", "required": true},
+          {"key": "name", "label": "Contact Name", "type": "string", "required": true},
+          {"key": "email", "label": "Email", "type": "string", "required": false},
+          {"key": "phone", "label": "Phone", "type": "string", "required": false},
+          {"key": "company", "label": "Company", "type": "string", "required": false},
+          {"key": "tags", "label": "Tags", "type": "string", "required": false, "helpText": "Comma-separated tags"},
+          {"key": "notes", "label": "Notes", "type": "text", "required": false},
+          {"key": "source", "label": "Source", "type": "string", "required": false, "default": "zapier"}
+        ]
+      }
+    }
+  }
+}

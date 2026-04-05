@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PWA Screenshots — DingDawg Agent 1</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #07111c; color: #f0f0f0; padding: 2rem; max-width: 640px; margin: 0 auto; }
+    h1   { color: #F6B400; }
+    code { background: #0d1f30; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+    ul   { line-height: 2; }
+    .note { border-left: 3px solid #F6B400; padding-left: 1rem; margin: 1.5rem 0; color: #ccc; }
+  </style>
+</head>
+<body>
+  <h1>PWA Screenshots Needed</h1>
+
+  <p>
+    This directory holds screenshots shown in the browser's "Install App" prompt
+    and in app store listings for the DingDawg Agent 1 PWA.
+  </p>
+
+  <div class="note">
+    These files are <strong>not yet generated</strong>.
+    Add real screenshots to enable rich install prompts on Chrome/Edge.
+  </div>
+
+  <h2>Required files</h2>
+  <ul>
+    <li><code>screenshot-wide.png</code> — 1280 × 720 px, desktop/wide viewport</li>
+    <li><code>screenshot-narrow.png</code> — 750 × 1334 px, mobile/narrow viewport</li>
+  </ul>
+
+  <h2>How to generate</h2>
+  <ol>
+    <li>Open the app in a browser at the size listed above.</li>
+    <li>Take a screenshot (or use Playwright's <code>page.screenshot()</code>).</li>
+    <li>Save the file here with the exact filename above.</li>
+    <li>Update <code>public/manifest.json</code> to point to these files under the <code>screenshots</code> key.</li>
+  </ol>
+
+  <h2>Playwright snippet</h2>
+  <pre style="background:#0d1f30;padding:1rem;border-radius:6px;overflow:auto"><code>// e2e/generate-screenshots.ts
+await page.setViewportSize({ width: 1280, height: 720 });
+await page.goto('/');
+await page.screenshot({ path: 'public/screenshots/screenshot-wide.png' });
+
+await page.setViewportSize({ width: 750, height: 1334 });
+await page.screenshot({ path: 'public/screenshots/screenshot-narrow.png' });</code></pre>
+</body>
+</html>

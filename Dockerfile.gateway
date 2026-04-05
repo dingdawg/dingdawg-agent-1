@@ -1,0 +1,38 @@
+FROM python:3.11-slim AS base
+
+LABEL maintainer="Innovative Systems Global LLC"
+LABEL description="ISG Agent 1 — Gateway Service"
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends tini && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd --gid 1001 isgagent && \
+    useradd --uid 1001 --gid isgagent --shell /bin/false --create-home isgagent
+
+# Copy and install Python dependencies
+COPY gateway/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY gateway/ ./
+
+# Create data directory
+RUN mkdir -p /app/data && chown -R isgagent:isgagent /app/data
+
+# Switch to non-root user
+USER isgagent
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python -c "import httpx; r = httpx.get('http://localhost:8080/health'); r.raise_for_status()"
+
+EXPOSE 8080
+
+ENTRYPOINT ["tini", "--"]
+CMD ["python", "-m", "isg_agent"]

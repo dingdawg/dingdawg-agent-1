@@ -1,0 +1,70 @@
+# =============================================================================
+# DingDawg Agent 1 — Docker Build Exclusions
+# =============================================================================
+
+# Python virtual environments and caches
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Testing artifacts
+.pytest_cache/
+tests/
+htmlcov/
+.coverage
+coverage.xml
+.benchmarks/
+
+# Frontend (not needed in backend container)
+frontend/
+
+# Git
+.git/
+.gitignore
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment files and secrets (never bake into image)
+.env
+.env.*
+!.env.template
+
+# Docker meta (avoid recursive context)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+*.md
+docs/
+memory/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Linter and type checker caches
+.mypy_cache/
+.ruff_cache/
+
+# Local config (not for production image)
+config/
+
+# MCP config (not for production image)
+.mcp.json
+
+# CI/CD
+.github/
+
+# Data directory (mounted as volume, not baked in)
+data/

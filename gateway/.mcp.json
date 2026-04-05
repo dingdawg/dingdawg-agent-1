@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "/home/joe-rangel/.npm-global/bin/playwright-mcp",
+      "args": []
+    },
+    "mila-sek": {
+      "command": "/home/joe-rangel/Desktop/Jarvis-Main-Brain/mila_os/mcp_server/.venv/bin/python3",
+      "args": [
+        "-m",
+        "mila_os.mcp_server"
+      ],
+      "cwd": "/home/joe-rangel/Desktop/Jarvis-Main-Brain",
+      "env": {
+        "PYTHONPATH": "/home/joe-rangel/Desktop/Jarvis-Main-Brain"
+      }
+    }
+  }
+}

@@ -1,0 +1,208 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+.Python
+develop-eggs/
+lib/
+lib64/
+sdist/
+var/
+*.manifest
+*.spec
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.hypothesis/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+pyrightconfig.json
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+
+# =========================
+# Node.js / TypeScript
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.npm
+*.tgz
+
+# Build output
+dist/
+build/
+out/
+.next/
+.nuxt/
+.output/
+storybook-static/
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+.history/
+
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# =========================
+# Docker
+# =========================
+docker-compose.override.yml
+
+# =========================
+# Data / Runtime
+# =========================
+data/
+*.db
+*.sqlite3
+*.sqlite
+
+# =========================
+# Misc
+# =========================
+*.bak
+*.tmp
+*.temp
+*.orig
+
+# =========================
+# CLOSED SOURCE — ISG IP
+# Never publish. Never commit.
+# =========================
+
+# DDAG v1 protocol (WAL, checkpoints, idempotency, FSM, Soul)
+gateway/isg_agent/protocol/
+
+# Core intelligence (brain, memory, hooks, middleware)
+gateway/isg_agent/brain/
+gateway/isg_agent/memory/
+gateway/isg_agent/hooks/
+gateway/isg_agent/core/
+gateway/isg_agent/middleware/
+
+# Identity, security, capabilities
+gateway/isg_agent/identity/
+gateway/isg_agent/security/
+gateway/isg_agent/capabilities/
+gateway/isg_agent/skills/
+gateway/isg_agent/sandbox/
+
+# Agent implementations
+gateway/isg_agent/agents/
+gateway/isg_agent/protocols/
+
+# Internal modules
+gateway/isg_agent/cache/
+gateway/isg_agent/comms/
+gateway/isg_agent/plugins/
+gateway/isg_agent/integrations/
+gateway/isg_agent/finance/
+gateway/isg_agent/personal/
+
+# MiLA CLI (fully closed)
+gateway/mila_coder/
+gateway/mila_coder_cli/
+
+# Internal docs
+AGENT1_SPEC_KIT.md
+gateway/CLAUDE.md
+gateway/SESSION_*.md
+trademark-filing/
+skills/
+
+# Claude Code internal config
+.claude/
+
+# Secrets / env
+gateway/.env.stripe
+gateway/.env.template
+*.stripe
+
+# DDAG protocol tests (reveal closed-source API surface)
+gateway/tests/test_ddag_protocol.py
+gateway/tests/test_ddag_phase2_memory.py
+
+# Internal strategy / audit docs
+gateway/CORE_MODULE_AUDIT.md
+gateway/MCP_OFFERING_SPEC.md
+gateway/STRIPE_SETUP_GUIDE.py
+gateway/STRIPE_SETUP_GUIDE.md
+gateway/utils/market_*.py
+gateway/utils/market_command_center.py
+gateway/utils/market_expansion_readiness.py
+gateway/utils/market_gap_memory_registry.py
+gateway/ui/market_*.py
+gateway/ui/market_gap_command_framework.py
+gateway/ui/system_map_card.py
+
+# Internal session notes
+gateway/SESSION_*.md
+
+# E2E screenshots (folder names expose Railway/Stripe URLs)
+gateway/frontend/e2e-screenshots/
+
+# Admin MiLA page (reveals internal branding)
+gateway/frontend/src/app/admin/mila/
+
+# Internal enforcement docs
+gateway/docs/STRUCTURAL_ENFORCEMENT_PROTOCOLS.md
+
+# MiLA bridge test (reveals internal MiLA integration)
+gateway/tests/test_mila_bridge.py

@@ -1,0 +1,324 @@
+# DingDawg Main — Product Acceptance Tests
+# Version: 1.0 | Last Updated: 2026-02-19
+# Purpose: Executable user journeys with binary pass/fail criteria.
+# DingDawg Main is a food delivery SaaS for restaurant owners.
+# Two user types: CUSTOMER (orders food) and OWNER (manages restaurant).
+
+product: "DingDawg Main"
+version: "1.0"
+last_updated: "2026-02-19"
+
+# ---------------------------------------------------------------------------
+# THREE LAWS OF COMMERCIAL READINESS
+# ---------------------------------------------------------------------------
+three_laws_check:
+  law_1_stranger_test: "Can a hungry person order food from a restaurant using this app without any help?"
+  law_2_user_perceives: "Does the customer see their food order progressing? Does the owner see orders coming in?"
+  law_3_first_five_minutes: "Within 5 minutes, has the customer placed an order? Has the owner seen their dashboard?"
+
+# ---------------------------------------------------------------------------
+# JOBS-TO-BE-DONE
+# ---------------------------------------------------------------------------
+jobs_to_be_done:
+  customer: "I'm hungry, busy, want food I'll enjoy, no price/timing surprises. I want to feel taken care of."
+  owner: "I want more orders, less chaos, and clear visibility into what's happening. I want to feel in control."
+
+# ---------------------------------------------------------------------------
+# CUSTOMER JOURNEYS
+# ---------------------------------------------------------------------------
+journeys:
+
+  # =========================================================================
+  # J001: Customer orders food for the first time (P0)
+  # =========================================================================
+  - id: "J001"
+    name: "Customer places first food order"
+    priority: "P0"
+    persona: "CUSTOMER"
+    law_tested: "LAW 3 — First 5 minutes. Hungry person to order placed."
+    preconditions:
+      - "At least one restaurant with a menu is seeded in the system"
+      - "Stripe is configured with test keys"
+    steps:
+      - step: 1
+        action: "Open the app on mobile"
+        expected: "Landing page with restaurants or menu visible, no login required to browse"
+        verify_binary: "Page loads AND restaurant/menu content visible AND no auth wall for browsing"
+      - step: 2
+        action: "Browse a restaurant menu"
+        expected: "Menu items with names, descriptions, prices, and images visible"
+        verify_binary: "Menu items render AND each has name + price AND prices in dollars (not cents)"
+      - step: 3
+        action: "Add items to cart"
+        expected: "Cart updates with item count and running total, visual feedback on add"
+        verify_binary: "Cart badge shows count AND total displayed AND button feedback < 100ms"
+      - step: 4
+        action: "View cart"
+        expected: "All items listed with quantities, subtotal, fees, and total clearly shown"
+        verify_binary: "All added items present AND subtotal correct AND fees itemized AND total shown"
+      - step: 5
+        action: "Proceed to checkout"
+        expected: "Signup/login prompt OR guest checkout option, then payment form"
+        verify_binary: "Auth or guest option shown AND payment form renders AND Stripe loaded"
+      - step: 6
+        action: "Enter delivery address and payment"
+        expected: "Address accepted, payment processed, order confirmation shown"
+        verify_binary: "HTTP 2xx from payment AND order ID shown AND ETA displayed"
+      - step: 7
+        action: "Track order"
+        expected: "Real-time order status updates (confirmed, preparing, dispatched, delivered)"
+        verify_binary: "Order status visible AND status updates in < 5s after state change"
+    success_criteria: "Customer goes from app open to order placed in under 5 minutes"
+    failure_means: "Product does not solve the customer's problem. They will use DoorDash instead."
+    current_status: "PARTIAL — menu browsing works, cart works, Stripe wired but guest checkout incomplete, tracking needs SSE wiring"
+
+  # =========================================================================
+  # J002: Customer reorders a previous meal (P1)
+  # =========================================================================
+  - id: "J002"
+    name: "Customer reorders from order history"
+    priority: "P1"
+    persona: "CUSTOMER"
+    law_tested: "LAW 1 — Effortless repeat usage"
+    preconditions:
+      - "Customer has a previous order"
+    steps:
+      - step: 1
+        action: "Log in and navigate to order history"
+        expected: "Previous orders listed with restaurant name, items, date, and total"
+        verify_binary: "Order history renders AND at least 1 order shown AND details visible"
+      - step: 2
+        action: "Click 'reorder' on a previous order"
+        expected: "Cart populated with same items, ready for checkout"
+        verify_binary: "Cart contains same items AND total matches AND checkout accessible"
+      - step: 3
+        action: "Complete checkout"
+        expected: "Order placed with saved payment method"
+        verify_binary: "Order confirmed AND order ID assigned AND ETA shown"
+    success_criteria: "Repeat order takes under 60 seconds from login to confirmation"
+    failure_means: "Returning customers face unnecessary friction. They leave."
+    current_status: "FAIL — no order history UI, no reorder functionality"
+
+  # =========================================================================
+  # J003: Owner onboards restaurant (P0)
+  # =========================================================================
+  - id: "J003"
+    name: "Restaurant owner onboards their business"
+    priority: "P0"
+    persona: "OWNER"
+    law_tested: "LAW 3 — Owner must see value in first session"
+    preconditions:
+      - "Owner has email and business details"
+      - "Stripe Connect configured"
+    steps:
+      - step: 1
+        action: "Navigate to owner signup/onboarding"
+        expected: "Clear owner-specific signup flow, not mixed with customer signup"
+        verify_binary: "Owner signup form renders AND business name field present AND clear distinction from customer flow"
+      - step: 2
+        action: "Enter business details"
+        expected: "Setup wizard: business name, address, cuisine type, operating hours"
+        verify_binary: "Wizard steps render AND data persists between steps AND progress indicator shown"
+      - step: 3
+        action: "Upload or create menu"
+        expected: "Menu editor with add/edit/delete items, categories, prices"
+        verify_binary: "Menu editor renders AND items can be added AND prices accept decimal input"
+      - step: 4
+        action: "Connect payment via Stripe Connect"
+        expected: "Stripe onboarding flow launches, returns to dashboard on completion"
+        verify_binary: "Stripe Connect URL generated AND redirect back works AND payment status shown"
+      - step: 5
+        action: "View owner dashboard"
+        expected: "Dashboard shows orders (or empty state with encouragement), revenue, menu status"
+        verify_binary: "Dashboard renders AND at least 3 data sections visible AND no blank panels"
+    success_criteria: "Owner has restaurant live and accepting orders within 15 minutes of starting"
+    failure_means: "Owners won't list their restaurant. No supply = no marketplace."
+    current_status: "PARTIAL — setup wizard has DB persistence, menu CRUD exists, Stripe Connect wired but not E2E tested"
+
+  # =========================================================================
+  # J004: Owner manages incoming orders (P0)
+  # =========================================================================
+  - id: "J004"
+    name: "Owner receives and manages orders in real-time"
+    priority: "P0"
+    persona: "OWNER"
+    law_tested: "LAW 2 — Owner must see orders the moment they arrive"
+    preconditions:
+      - "Restaurant is set up and has menu items"
+      - "At least one customer order has been placed"
+    steps:
+      - step: 1
+        action: "Open owner dashboard"
+        expected: "New order notification visible, order details accessible"
+        verify_binary: "New order indicator present AND order count > 0"
+      - step: 2
+        action: "View order details"
+        expected: "Customer name, items, quantities, special instructions, total, delivery address"
+        verify_binary: "All order fields present AND items match cart AND total correct"
+      - step: 3
+        action: "Accept order (confirm)"
+        expected: "Order status changes to CONFIRMED, customer notified"
+        verify_binary: "Status = CONFIRMED AND state transition recorded AND customer-visible update occurs"
+      - step: 4
+        action: "Mark as preparing, then ready"
+        expected: "Status updates flow through state machine, customer sees each update"
+        verify_binary: "CONFIRMED -> PREPARING -> READY transitions succeed AND each update < 5s to customer"
+    success_criteria: "Owner can manage full order lifecycle from dashboard without confusion"
+    failure_means: "Owners can't fulfill orders. Customers get cold food. Everyone loses."
+    current_status: "PARTIAL — order state machine works in backend, SSE event bus exists, owner dashboard partially wired"
+
+  # =========================================================================
+  # J005: Guest checkout without account (P0)
+  # =========================================================================
+  - id: "J005"
+    name: "Customer checks out without creating an account"
+    priority: "P0"
+    persona: "CUSTOMER"
+    law_tested: "LAW 3 — Registration wall before value = 53% abandonment"
+    preconditions:
+      - "User has not logged in"
+      - "User has items in cart"
+    steps:
+      - step: 1
+        action: "Click checkout with items in cart"
+        expected: "Guest checkout option visible alongside account creation"
+        verify_binary: "Guest checkout button/option exists AND is not hidden or secondary"
+      - step: 2
+        action: "Select guest checkout"
+        expected: "Minimal form: email, delivery address, payment. No password required."
+        verify_binary: "No password field AND email field AND address field AND payment form"
+      - step: 3
+        action: "Complete payment"
+        expected: "Order placed, confirmation with tracking link sent to email"
+        verify_binary: "HTTP 2xx AND order ID shown AND guest token issued for tracking"
+    success_criteria: "Guest can order food without creating an account, under 3 minutes"
+    failure_means: "Requiring registration before ordering loses 53% of hungry customers."
+    current_status: "FAIL — guest checkout token flow incomplete"
+
+  # =========================================================================
+  # J006: Owner views revenue and analytics (P2)
+  # =========================================================================
+  - id: "J006"
+    name: "Owner reviews business performance"
+    priority: "P2"
+    persona: "OWNER"
+    law_tested: "LAW 2 — Revenue visibility builds trust"
+    preconditions:
+      - "Restaurant has processed orders"
+    steps:
+      - step: 1
+        action: "Navigate to analytics/revenue section"
+        expected: "Revenue summary visible: today, this week, this month"
+        verify_binary: "Revenue numbers displayed AND time periods selectable AND amounts in dollars"
+      - step: 2
+        action: "View order history"
+        expected: "Paginated list of past orders with status, total, timestamp"
+        verify_binary: "Order list renders AND pagination works AND filter by date available"
+      - step: 3
+        action: "View top-selling items"
+        expected: "Items ranked by order count"
+        verify_binary: "At least 1 item shown AND count displayed"
+    success_criteria: "Owner understands how their business is performing in under 2 minutes"
+    failure_means: "Owners can't see if the platform is worth paying for."
+    current_status: "FAIL — no analytics page, no revenue aggregation endpoint"
+
+  # =========================================================================
+  # J007: PWA installation (P1)
+  # =========================================================================
+  - id: "J007"
+    name: "Customer installs app on phone"
+    priority: "P1"
+    persona: "CUSTOMER"
+    law_tested: "LAW 1 — Must feel like a real app"
+    preconditions:
+      - "User on mobile Chrome or Safari"
+      - "HTTPS enabled"
+    steps:
+      - step: 1
+        action: "Visit site on mobile"
+        expected: "Install prompt or Add to Home Screen available"
+        verify_binary: "manifest.json loads AND service worker registered AND icons defined"
+      - step: 2
+        action: "Install the app"
+        expected: "App on home screen with DingDawg icon and name"
+        verify_binary: "192px + 512px icons AND app name 'DingDawg' AND standalone display"
+      - step: 3
+        action: "Open installed app"
+        expected: "Launches standalone, loads to last-used restaurant or home"
+        verify_binary: "No URL bar AND theme color AND content loads"
+    success_criteria: "User can install DingDawg like a native app from their phone"
+    failure_means: "Violates PERMANENT RULE #14 — all products are PWA mobile webapps."
+    current_status: "PARTIAL — Next.js frontend exists but PWA not configured"
+
+# ---------------------------------------------------------------------------
+# PERFORMANCE THRESHOLDS
+# ---------------------------------------------------------------------------
+performance_thresholds:
+  lcp_max_ms: 2500
+  inp_max_ms: 200
+  cls_max: 0.1
+  api_p95_ms: 500
+  button_feedback_ms: 100
+  page_load_max_ms: 3000
+  order_status_update_max_ms: 5000   # SSE update latency
+  menu_load_max_ms: 2000
+  checkout_total_max_seconds: 60
+
+# ---------------------------------------------------------------------------
+# MOBILE REQUIREMENTS
+# ---------------------------------------------------------------------------
+mobile_requirements:
+  min_width_px: 375
+  touch_target_min_px: 44
+  pwa_installable: true
+  offline_support: true
+  no_horizontal_scroll: true
+  standalone_display: true
+
+# ---------------------------------------------------------------------------
+# BILLING REQUIREMENTS
+# ---------------------------------------------------------------------------
+billing_requirements:
+  price_visible_before_signup: true
+  menu_prices_in_dollars: true          # Never show cents to customers
+  fees_itemized_before_payment: true    # Delivery, service, tax all visible
+  payment_flow_max_seconds: 60
+  guest_checkout_available: true
+  tip_option_available: true
+
+# ---------------------------------------------------------------------------
+# POLISH REQUIREMENTS
+# ---------------------------------------------------------------------------
+polish_requirements:
+  zero_console_errors: true
+  custom_404_page: true
+  custom_500_page: true
+  loading_states_on_all_async: true
+  no_programmer_jargon_in_ui: true
+  empty_states_with_cta: true
+  skeleton_screens_not_spinners: true
+  inline_form_validation: true
+  order_confirmation_animation: true
+
+# ---------------------------------------------------------------------------
+# OPERATIONS REQUIREMENTS
+# ---------------------------------------------------------------------------
+operations_requirements:
+  health_endpoint_with_deps: true
+  monitoring_dashboard: true
+  alerting_on_5xx: true
+  rollback_under_5_minutes: true
+  automated_daily_backups: true
+  webhook_dedup_and_idempotency: true
+  rate_limiting_on_all_endpoints: true
+
+# ---------------------------------------------------------------------------
+# CURRENT OVERALL STATUS
+# ---------------------------------------------------------------------------
+current_status:
+  journeys_passing: 0
+  journeys_total: 7
+  p0_passing: 0
+  p0_total: 4
+  customer_readiness: "0/7 journeys pass end-to-end. Backend is 85% ready, frontend integration incomplete."
+  next_action: "Fix J001 (customer orders food) and J005 (guest checkout). A hungry person must be able to order."

@@ -1,0 +1,72 @@
+# =============================================================================
+# DingDawg Agent 1 — Render Blueprint (Infrastructure as Code)
+# =============================================================================
+# Deploy with: Connect GitHub repo → Render auto-detects this file
+#
+# Architecture:
+#   - Backend:  Python/FastAPI on port 8900 (Docker, SQLite persistent disk)
+#   - Frontend: Next.js 16 on port 3000 (Docker, static + SSR)
+#
+# Both services use Docker for consistent builds.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend API — DingDawg Agent 1 Gateway
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: dingdawg-agent-api
+    runtime: docker
+    dockerfilePath: ./gateway/Dockerfile
+    dockerContext: ./gateway
+    region: oregon
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: ISG_AGENT_HOST
+        value: "0.0.0.0"
+      - key: ISG_AGENT_PORT
+        value: "8900"
+      - key: PORT
+        value: "8900"
+      - key: ISG_AGENT_DB_PATH
+        value: "/app/data/agent.db"
+      - key: ISG_AGENT_LOG_LEVEL
+        value: "info"
+      - key: ISG_AGENT_WORKERS
+        value: "2"
+      - key: ISG_AGENT_ENABLE_REMOTE
+        value: "true"
+      - key: ISG_REMOTE_SECRET
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    disk:
+      name: agent-data
+      mountPath: /app/data
+      sizeGB: 1
+
+  # ---------------------------------------------------------------------------
+  # Frontend — Next.js 16 SSR + Static
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: dingdawg-agent-web
+    runtime: docker
+    dockerfilePath: ./gateway/frontend/Dockerfile
+    dockerContext: ./gateway/frontend
+    region: oregon
+    plan: starter
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: ""
+      - key: BACKEND_URL
+        fromService:
+          name: dingdawg-agent-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: NODE_ENV
+        value: "production"
+      - key: PORT
+        value: "3000"

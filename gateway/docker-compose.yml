@@ -1,0 +1,45 @@
+# DingDawg Agent 1 — Full-Stack Docker Compose
+# Usage: docker compose up --build
+# -------------------------------------------------
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8900:8900"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - ISG_AGENT_HOST=0.0.0.0
+      - ISG_AGENT_PORT=8900
+      - ISG_AGENT_DB_PATH=/app/data/agent.db
+    volumes:
+      - agent-data:/app/data
+    healthcheck:
+      test: ["CMD", "/app/scripts/healthcheck.sh"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ""
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      - BACKEND_URL=http://backend:8900
+    restart: unless-stopped
+
+volumes:
+  agent-data:

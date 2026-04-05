@@ -1,0 +1,871 @@
+@import "tailwindcss";
+
+/* ============================================================================
+ * DingDawg Agent 1 — Dark Glass Theme (Tailwind v4 CSS-first config)
+ * Adapted from DingDawg Command Center restaurant frontend
+ * ============================================================================ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  /* DingDawg custom palette */
+  --color-ink-950: #07111c;
+  --color-ink-900: #0a1624;
+  --color-ink-850: #0c1a2a;
+  --color-ink-800: #0f2133;
+  --color-ink-750: #14283d;
+
+  --color-gold: #F6B400;
+  --color-gold-dark: #D99500;
+  --color-gold-light: #FFD54F;
+
+  --color-stroke: rgba(255, 255, 255, 0.08);
+  --color-stroke-2: rgba(255, 255, 255, 0.12);
+  --color-glass: rgba(10, 16, 24, 0.55);
+  --color-glass-2: rgba(10, 16, 24, 0.35);
+
+  --color-muted: #94a3b8;
+  --color-muted-dark: #64748b;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+
+  /*
+   * Font stacks — next/font/google injects --font-heading-loaded and
+   * --font-body-loaded as CSS variables on <html> at build time.
+   * We use them as the first item in the stack so the self-hosted font
+   * takes priority, with system fallbacks if the variable is absent
+   * (e.g., during SSR before hydration).
+   */
+  --font-heading: var(--font-heading-loaded, "Outfit"), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-body-loaded, "DM Sans"), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-body-loaded, "DM Sans"), ui-sans-serif, system-ui, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas,
+    "Liberation Mono", Menlo, monospace;
+
+  --color-gold-stroke: rgba(246, 180, 0, 0.12);
+  --color-gold-glow: rgba(246, 180, 0, 0.15);
+}
+
+:root {
+  color-scheme: dark;
+  --background: #07111c;
+  --foreground: #f1f5f9;
+  --gold-500: #F6B400;
+  --gold-600: #e9a600;
+  --glass: rgba(10, 16, 24, 0.55);
+  --glass2: rgba(10, 16, 24, 0.35);
+  --stroke: rgba(255, 255, 255, 0.08);
+  --stroke2: rgba(255, 255, 255, 0.12);
+  --radius: 0.75rem;
+
+  /* Ink palette — mirrors @theme inline --color-ink-* for plain var(--ink-*) refs */
+  --ink-950: #07111c;
+  --ink-900: #0a1624;
+  --ink-850: #0c1a2a;
+  --ink-800: #0f2133;
+  --ink-750: #14283d;
+
+  /* Standard type scale — 16px base (matches Claude, Grok, modern web apps) */
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-base: 1rem;     /* 16px — standard web body */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;    /* 24px */
+  --text-3xl: 1.75rem;   /* 28px */
+}
+
+/* ============================================================================
+ * BASE STYLES
+ * ============================================================================ */
+
+html,
+body {
+  height: 100dvh;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 16px; /* Standard web base — matches Claude, Grok, ChatGPT */
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+body {
+  /*
+   * PERF: Simplified background — was 5 layered gradients causing continuous
+   * repaints on mobile scroll. Now solid base + single fixed pseudo-element
+   * for the ambient glow (painted once, never re-composited on scroll).
+   */
+  background: #07111c;
+  color: var(--foreground);
+  font-family: var(--font-body);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Three subtle gradients — gold crown, blue ambient, blue edge — painted once */
+  background:
+    radial-gradient(
+      ellipse 800px 400px at 50% 0%,
+      rgba(246, 180, 0, 0.05),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 900px 500px at 18% 10%,
+      rgba(45, 120, 255, 0.10),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 700px 500px at 75% 20%,
+      rgba(0, 210, 255, 0.06),
+      transparent 55%
+    );
+  will-change: auto; /* hint removed after initial paint */
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--gold-500);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(246, 180, 0, 0.2);
+}
+
+/* ============================================================================
+ * GLASS PANEL COMPONENTS
+ * ============================================================================ */
+
+.glass-panel {
+  position: relative;
+  z-index: 1;
+  background: var(--glass);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--stroke);
+  border-radius: 22px;
+  /* Subtle gold-tinted shadow for depth */
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.35),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 0 0 1px rgba(246, 180, 0, 0.03) inset;
+  /* PERF: promote to compositor layer so blur doesn't repaint on scroll */
+  transform: translateZ(0);
+}
+
+/* PERF: on mobile, backdrop-blur is GPU-expensive — use solid fallback */
+@media (max-width: 768px) {
+  .glass-panel {
+    background: rgba(10, 16, 24, 0.92);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.gold-glow {
+  box-shadow: 0 0 60px rgba(246, 180, 0, 0.15),
+    0 0 120px rgba(246, 180, 0, 0.08);
+}
+
+/* ============================================================================
+ * PREMIUM BUTTON SYSTEM
+ * ============================================================================ */
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 1.5rem;
+  height: 3rem;             /* 48px — touch-friendly */
+  border-radius: 0.75rem;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  background: var(--gold-500);
+  color: #07111c;
+  border: none;
+  cursor: pointer;
+  transition: background-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+  box-shadow: 0 0 0 0 rgba(246, 180, 0, 0);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.btn-primary:hover {
+  background: var(--gold-600);
+  transform: scale(1.02);
+  box-shadow: 0 0 24px rgba(246, 180, 0, 0.25);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 1.5rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  font-weight: 500;
+  font-size: 0.9375rem;
+  background: transparent;
+  color: var(--foreground);
+  border: 1px solid var(--stroke2);
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.btn-secondary:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  transform: scale(1.02);
+}
+
+.btn-secondary:active {
+  transform: scale(0.98);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  background: transparent;
+  color: var(--color-muted);
+  border: none;
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease, transform 150ms ease;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.btn-ghost:hover {
+  color: var(--foreground);
+  background: rgba(255, 255, 255, 0.05);
+  transform: scale(1.02);
+}
+
+.btn-ghost:active {
+  transform: scale(0.98);
+}
+
+/* ============================================================================
+ * PREMIUM INPUT FIELD
+ * ============================================================================ */
+
+.input-field {
+  display: flex;
+  width: 100%;
+  height: 3rem;             /* h-12 */
+  padding: 0 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.9375rem;
+  background: rgba(15, 33, 51, 0.60);  /* ink-800/60 */
+  color: var(--foreground);
+  border: 1px solid var(--stroke);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+  outline: none;
+}
+
+.input-field::placeholder {
+  color: var(--color-muted);
+}
+
+.input-field:hover {
+  border-color: var(--stroke2);
+  background: rgba(15, 33, 51, 0.75);
+}
+
+.input-field:focus {
+  border-color: rgba(246, 180, 0, 0.50);
+  box-shadow: 0 0 0 3px rgba(246, 180, 0, 0.10);
+  background: rgba(15, 33, 51, 0.80);
+}
+
+.input-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================================
+ * HEADING DEPTH — subtle text-shadow for premium feel
+ * ============================================================================ */
+
+.heading-depth {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 40px rgba(246, 180, 0, 0.06);
+}
+
+/* Gradient text — hero "Your Rules" style */
+.text-gradient-gold {
+  background: linear-gradient(135deg, #F6B400 0%, #FFD54F 50%, #F6B400 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Animated gradient border for CTA panels */
+@keyframes gradient-border-spin {
+  0%   { --angle: 0deg; }
+  100% { --angle: 360deg; }
+}
+
+@property --angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.cta-gradient-border {
+  position: relative;
+}
+
+.cta-gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--angle),
+    transparent 0%,
+    rgba(246, 180, 0, 0.35) 25%,
+    transparent 50%,
+    rgba(246, 180, 0, 0.15) 75%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: gradient-border-spin 6s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cta-gradient-border::before {
+    animation: none;
+  }
+}
+
+/* ============================================================================
+ * CHAT COMPONENTS
+ * ============================================================================ */
+
+.dd-chat-bubble {
+  border-radius: 1rem;
+  padding: 0.75rem 1rem;
+  contain: content;
+}
+
+.dd-chat-bubble.user {
+  margin-left: auto;
+  max-width: 85%;
+  background: var(--gold-500);
+  color: #07111c;
+}
+
+.dd-chat-bubble.assistant {
+  width: 100%;
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* ── Markdown inside assistant bubbles ── */
+.dd-markdown {
+  font-size: 15px;
+  line-height: 1.7;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.dd-markdown p {
+  margin-bottom: 0.75em;
+}
+.dd-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.dd-markdown strong {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.dd-markdown em {
+  font-style: italic;
+}
+
+.dd-markdown h1, .dd-markdown h2, .dd-markdown h3,
+.dd-markdown h4, .dd-markdown h5, .dd-markdown h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  color: rgba(255, 255, 255, 0.95);
+}
+.dd-markdown h1 { font-size: 1.25em; }
+.dd-markdown h2 { font-size: 1.15em; }
+.dd-markdown h3 { font-size: 1.05em; }
+
+.dd-markdown ul, .dd-markdown ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.75em;
+}
+.dd-markdown ul {
+  list-style-type: disc;
+}
+.dd-markdown ol {
+  list-style-type: decimal;
+}
+.dd-markdown li {
+  margin-bottom: 0.25em;
+}
+.dd-markdown li > p {
+  margin-bottom: 0.25em;
+}
+
+.dd-markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+.dd-markdown pre {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.75em 1em;
+  margin-bottom: 0.75em;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.dd-markdown pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dd-markdown blockquote {
+  border-left: 3px solid var(--gold-500, #F6B400);
+  padding-left: 1em;
+  margin-left: 0;
+  margin-bottom: 0.75em;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+}
+
+.dd-markdown a {
+  color: var(--gold-500, #F6B400);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dd-markdown a:hover {
+  opacity: 0.8;
+}
+
+.dd-markdown hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  margin: 1em 0;
+}
+
+.dd-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75em;
+  font-size: 0.9em;
+}
+.dd-markdown th, .dd-markdown td {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 0.4em 0.75em;
+  text-align: left;
+}
+.dd-markdown th {
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+}
+
+.dd-primary-cta {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  /* PERF: was 'transition: all 150ms' — animating 'all' triggers layout.
+     Scope to only color-related properties (GPU-friendly). */
+  transition: background-color 150ms, color 150ms, opacity 150ms;
+  background: var(--gold-500);
+  color: #07111c;
+  min-height: 48px;
+}
+
+.dd-primary-cta:hover {
+  background: var(--gold-600);
+}
+
+/* ============================================================================
+ * SCROLLBAR
+ * ============================================================================ */
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+
+/* ============================================================================
+ * SPINNER
+ * ============================================================================ */
+
+.spinner {
+  animation: spin 1s linear infinite;
+  height: 1.25rem;
+  width: 1.25rem;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================================
+ * CARD ANIMATIONS — chat-first dashboard
+ * ============================================================================ */
+
+@keyframes card-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes card-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.card-enter {
+  animation: card-slide-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.card-enter-delay-1 {
+  animation: card-slide-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) 0.08s forwards;
+  opacity: 0;
+}
+
+.card-enter-delay-2 {
+  animation: card-slide-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) 0.16s forwards;
+  opacity: 0;
+}
+
+.card-enter-delay-3 {
+  animation: card-slide-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) 0.24s forwards;
+  opacity: 0;
+}
+
+/* Gold-stroke glass panel variant */
+.glass-panel-gold {
+  position: relative;
+  z-index: 1;
+  background: var(--glass);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--color-gold-stroke, rgba(246, 180, 0, 0.12));
+  border-radius: 22px;
+  transform: translateZ(0);
+}
+
+/* PERF: mobile solid fallback for gold glass panels */
+@media (max-width: 768px) {
+  .glass-panel-gold {
+    background: rgba(10, 16, 24, 0.92);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.glass-panel-gold:hover {
+  border-color: rgba(246, 180, 0, 0.2);
+}
+
+/* User message gold glow */
+.dd-chat-bubble.user-glow {
+  box-shadow: 0 0 24px rgba(246, 180, 0, 0.12),
+    0 0 48px rgba(246, 180, 0, 0.06);
+}
+
+/* Agent thinking pulse */
+.thinking-pulse {
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+/* Collapsible sidebar */
+.dd-sidebar {
+  width: 260px;
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100%;
+  /* PERF: 200ms is snappier than 300ms; cubic-bezier for natural feel */
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 100;
+  will-change: transform;
+}
+
+.dd-sidebar.collapsed {
+  transform: translateX(-240px);
+}
+
+.dd-sidebar:hover {
+  transform: translateX(0) !important;
+}
+
+.dd-sidebar-trigger {
+  position: absolute;
+  right: -20px;
+  top: 0;
+  width: 20px;
+  height: 100%;
+}
+
+.dd-main-content {
+  margin-left: 260px;
+  /* GPU-accelerated transition — no layout recalc */
+  transition: none;
+  will-change: margin-left;
+}
+
+.dd-main-content.sidebar-collapsed {
+  margin-left: 20px;
+}
+
+@media (max-width: 768px) {
+  .dd-sidebar {
+    position: fixed;
+    height: 100%;
+    z-index: 1001;
+  }
+  .dd-main-content {
+    margin-left: 0;
+  }
+  .dd-main-content.sidebar-collapsed {
+    margin-left: 0;
+  }
+}
+
+/* ============================================================================
+ * SAFE AREA INSET UTILITIES — PWA standalone mode (iOS notch / Dynamic Island)
+ * Use .pt-safe on headers and .pb-safe on bottom nav bars.
+ * env() with 0px fallback is safe for all non-PWA contexts.
+ * ============================================================================ */
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* .pb-nav-safe removed — mobile bottom nav no longer exists */
+/* .pb-nav-safe {
+  padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 1024px) {
+  .pb-nav-safe {
+    padding-bottom: 0;
+  }
+} */
+
+/* ============================================================================
+ * SCROLL PERFORMANCE
+ * ============================================================================ */
+
+.scrollbar-thin,
+[class*="overflow-y-auto"],
+[class*="overflow-x-auto"] {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ============================================================================
+ * GPU ACCELERATION HINTS — fixed/sticky elements + animated containers
+ * ============================================================================ */
+
+/* Fixed chrome: nav bars, headers, bottom bars */
+header[class*="backdrop-blur"],
+nav[class*="backdrop-blur"],
+nav[class*="fixed"],
+aside[class*="fixed"] {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* Chat bubbles — layout containment prevents reflow from propagating */
+.dd-chat-bubble {
+  contain: content;
+}
+
+/* ============================================================================
+ * MOBILE BACKDROP-BLUR REMOVAL — global sweep
+ * Any element with backdrop-blur on mobile gets a solid fallback.
+ * This supplements the .glass-panel mobile override above.
+ * ============================================================================ */
+
+@media (max-width: 768px) {
+  /* Header bars, bottom nav, modals — solid bg on mobile */
+  header[class*="backdrop-blur"],
+  nav[class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* ============================================================================
+ * REDUCED MOTION — accessibility + battery savings
+ * ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .card-enter,
+  .card-enter-delay-1,
+  .card-enter-delay-2,
+  .card-enter-delay-3 {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  .thinking-pulse {
+    animation: none !important;
+  }
+
+  body::before {
+    display: none;
+  }
+}
+
+/* ============================================================================
+ * NATIVE APP FEEL
+ * ============================================================================ */
+
+html, body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Smooth momentum scrolling */
+.native-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Prevent text selection on interactive elements */
+button, a, [role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Prevent iOS auto-zoom on input focus — inputs must be 16px+ */
+@supports (-webkit-touch-callout: none) {
+  input, textarea, select {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
+/* Hardware-accelerated sidebar transition (mobile drawer) */
+.sidebar-transition {
+  transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+/* Desktop sidebar width transition (expand ↔ icon-only) */
+.sidebar-width-transition {
+  transition: width 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: width;
+  overflow: hidden;
+}

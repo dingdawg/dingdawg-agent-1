@@ -1,0 +1,314 @@
+# DingDawg Agent 1 — Product Acceptance Tests
+# Version: 1.0 | Last Updated: 2026-02-19
+# Purpose: Executable user journeys with binary pass/fail criteria.
+# These are the REAL tests that matter — not test counts, not governance scores.
+# A product that fails any P0 journey is NOT ready to ship.
+
+product: "DingDawg Agent 1"
+version: "1.0"
+last_updated: "2026-02-19"
+
+# ---------------------------------------------------------------------------
+# THREE LAWS OF COMMERCIAL READINESS (embedded in every journey)
+# ---------------------------------------------------------------------------
+three_laws_check:
+  law_1_stranger_test: "Can a stranger who has never seen this product use it without help, documentation, or explanation?"
+  law_2_user_perceives: "Does the user SEE value? 913 passing tests are invisible. The chat response they receive is real."
+  law_3_first_five_minutes: "Within 5 minutes of landing, has the user accomplished something meaningful with AI?"
+
+# ---------------------------------------------------------------------------
+# JOBS-TO-BE-DONE
+# ---------------------------------------------------------------------------
+job_to_be_done: "I want AI to handle boring tasks so I can focus on what matters. I want to feel empowered, not confused."
+
+# ---------------------------------------------------------------------------
+# USER JOURNEYS (ordered by priority)
+# ---------------------------------------------------------------------------
+journeys:
+
+  # =========================================================================
+  # J001: First-time user signup and first AI conversation (P0)
+  # =========================================================================
+  - id: "J001"
+    name: "First-time user signup and first AI conversation"
+    priority: "P0"
+    law_tested: "LAW 3 — First 5 minutes determine everything"
+    preconditions:
+      - "User has never visited the site before"
+      - "User is on a mobile device (375px width)"
+      - "User has a valid email address"
+    steps:
+      - step: 1
+        action: "Navigate to landing page"
+        expected: "Page loads with clear value proposition and a single primary CTA"
+        verify_binary: "LCP < 2500ms AND CTA button visible AND no console errors"
+      - step: 2
+        action: "Click primary CTA (signup/get started)"
+        expected: "Signup form appears with 3 or fewer fields"
+        verify_binary: "Form renders AND field count <= 3 AND button feedback < 100ms"
+      - step: 3
+        action: "Fill in email, password, click submit"
+        expected: "Account created, user redirected to dashboard or chat interface"
+        verify_binary: "HTTP 2xx from /api/auth/register AND redirect occurs AND no error shown"
+      - step: 4
+        action: "See the AI chat interface"
+        expected: "Chat input visible, clear prompt or suggestion text, no empty state"
+        verify_binary: "Chat input element exists AND placeholder/suggestion text present AND no blank screen"
+      - step: 5
+        action: "Type a simple question and send it"
+        expected: "AI responds within 5 seconds with a coherent, helpful answer"
+        verify_binary: "Response appears AND response time < 5000ms AND response is not an error message"
+      - step: 6
+        action: "Read the response"
+        expected: "Response is formatted clearly, no raw JSON, no programmer jargon"
+        verify_binary: "No 'undefined', 'null', 'NaN', 'error', or stack traces visible"
+    success_criteria: "User has completed first AI conversation within 5 minutes of landing page load"
+    failure_means: "Product is not ready to ship. Fix this before anything else."
+    current_status: "FAIL — no landing page, signup requires manual API calls, no streaming responses"
+
+  # =========================================================================
+  # J002: Returning user login and conversation history (P0)
+  # =========================================================================
+  - id: "J002"
+    name: "Returning user login and conversation history"
+    priority: "P0"
+    law_tested: "LAW 1 — Stranger can use without help"
+    preconditions:
+      - "User has an existing account with previous conversations"
+    steps:
+      - step: 1
+        action: "Navigate to login page"
+        expected: "Login form visible, email and password fields, forgot password link"
+        verify_binary: "Form renders AND 2 input fields AND submit button AND forgot password link"
+      - step: 2
+        action: "Enter credentials and submit"
+        expected: "Logged in, redirected to chat interface with previous conversations listed"
+        verify_binary: "HTTP 2xx from /api/auth/login AND JWT stored AND redirect to chat"
+      - step: 3
+        action: "Click on a previous conversation"
+        expected: "Conversation history loads with all previous messages"
+        verify_binary: "Messages render AND message count > 0 AND scroll position correct"
+      - step: 4
+        action: "Send a follow-up message in the conversation"
+        expected: "AI responds with context from previous messages"
+        verify_binary: "Response references prior context AND response time < 5000ms"
+    success_criteria: "Returning user can access previous conversations and continue where they left off"
+    failure_means: "Users lose work. They will not return."
+    current_status: "FAIL — conversation persistence uses in-memory store, lost on server restart"
+
+  # =========================================================================
+  # J003: AI task completion (core value delivery) (P0)
+  # =========================================================================
+  - id: "J003"
+    name: "AI completes a real task for the user"
+    priority: "P0"
+    law_tested: "LAW 2 — What users perceive is what exists"
+    preconditions:
+      - "User is logged in"
+      - "At least one AI skill/agent is available"
+    steps:
+      - step: 1
+        action: "User describes a task in natural language"
+        expected: "AI acknowledges the task, shows it is working (loading indicator)"
+        verify_binary: "Loading state visible AND no frozen UI"
+      - step: 2
+        action: "Wait for AI to process"
+        expected: "Streaming response shows progress in real-time"
+        verify_binary: "Tokens stream incrementally AND no single 10+ second gap"
+      - step: 3
+        action: "AI delivers result"
+        expected: "Result is formatted, actionable, and clearly presented"
+        verify_binary: "Result section visible AND copy/download buttons if applicable AND no raw JSON"
+      - step: 4
+        action: "User evaluates result"
+        expected: "Result solves the stated task or provides clear explanation of limitations"
+        verify_binary: "Result is non-empty AND relevant to the original request"
+    success_criteria: "User has a tangible output from the AI that saves them time"
+    failure_means: "Core product value not delivered. Nothing else matters until this works."
+    current_status: "PARTIAL — chat works but no streaming, no task-specific formatting"
+
+  # =========================================================================
+  # J004: Payment and subscription (P0)
+  # =========================================================================
+  - id: "J004"
+    name: "User subscribes and pays"
+    priority: "P0"
+    law_tested: "LAW 2 — Payment flow must be perceived as safe and simple"
+    preconditions:
+      - "User is logged in"
+      - "Pricing page exists"
+      - "Stripe is configured"
+    steps:
+      - step: 1
+        action: "Navigate to pricing page"
+        expected: "Pricing tiers visible, price shown BEFORE any action required"
+        verify_binary: "At least 1 pricing tier visible AND dollar amount shown AND no login wall before seeing price"
+      - step: 2
+        action: "Click subscribe/buy"
+        expected: "Stripe checkout or payment form appears"
+        verify_binary: "Payment form renders AND Stripe.js loaded AND card input visible"
+      - step: 3
+        action: "Enter test card and submit"
+        expected: "Payment processes, confirmation shown, account upgraded"
+        verify_binary: "HTTP 2xx from payment endpoint AND confirmation UI shown AND account tier updated"
+      - step: 4
+        action: "Verify upgraded features are available"
+        expected: "Premium features unlocked, visible in UI"
+        verify_binary: "At least 1 premium feature accessible AND no 'upgrade required' prompts"
+    success_criteria: "User can pay and immediately access paid features, entire flow under 60 seconds"
+    failure_means: "No revenue. Product is free forever."
+    current_status: "FAIL — no payment UI, no Stripe integration in frontend, no pricing page"
+
+  # =========================================================================
+  # J005: PWA install on mobile (P1)
+  # =========================================================================
+  - id: "J005"
+    name: "Install app on mobile phone"
+    priority: "P1"
+    law_tested: "LAW 1 — Must feel like a real app, not a website"
+    preconditions:
+      - "User is on mobile Chrome or Safari"
+      - "HTTPS enabled"
+    steps:
+      - step: 1
+        action: "Visit site on mobile browser"
+        expected: "Install prompt appears or Add to Home Screen is available"
+        verify_binary: "manifest.json loads AND service worker registered AND install criteria met"
+      - step: 2
+        action: "Install the app"
+        expected: "App appears on home screen with correct icon and name"
+        verify_binary: "App icon 192px AND 512px defined AND app name correct AND standalone display"
+      - step: 3
+        action: "Open installed app"
+        expected: "App launches in standalone mode (no browser chrome), splash screen shows"
+        verify_binary: "No URL bar AND theme color applied AND content loads"
+      - step: 4
+        action: "Use app offline or in poor network"
+        expected: "Cached content available, graceful degradation for network-dependent features"
+        verify_binary: "Service worker intercepts requests AND offline page or cached content shown"
+    success_criteria: "User can install and use app from their phone's home screen"
+    failure_means: "Not meeting PERMANENT RULE #14 — all products must be PWA."
+    current_status: "FAIL — no manifest.json, no service worker, no PWA configuration"
+
+  # =========================================================================
+  # J006: Error recovery (P1)
+  # =========================================================================
+  - id: "J006"
+    name: "Graceful error handling and recovery"
+    priority: "P1"
+    law_tested: "LAW 2 — Errors must be human-readable, never programmer jargon"
+    preconditions:
+      - "User is logged in"
+    steps:
+      - step: 1
+        action: "Submit a request when server is slow"
+        expected: "Loading indicator appears, user knows something is happening"
+        verify_binary: "Loading state shown AND no frozen/unresponsive UI"
+      - step: 2
+        action: "Server returns an error"
+        expected: "Human-readable error message with next-step suggestion"
+        verify_binary: "Error text in plain English AND no stack trace AND no 'undefined' AND suggestion present"
+      - step: 3
+        action: "Network disconnects mid-conversation"
+        expected: "Clear offline indicator, message queued or retry option shown"
+        verify_binary: "Offline indicator visible AND no lost user input AND retry option available"
+      - step: 4
+        action: "Navigate to non-existent page"
+        expected: "Custom 404 page with navigation back to main app"
+        verify_binary: "Custom 404 page (not browser default) AND link to home/dashboard"
+    success_criteria: "Every error state shows a helpful message and a path forward"
+    failure_means: "Users hit a wall and leave. 88% never return after a bad experience."
+    current_status: "FAIL — no custom error pages, generic error messages, no offline handling"
+
+  # =========================================================================
+  # J007: Account management and cancellation (P2)
+  # =========================================================================
+  - id: "J007"
+    name: "User manages account and cancels subscription"
+    priority: "P2"
+    law_tested: "LAW 1 — Self-service, no support tickets needed"
+    preconditions:
+      - "User has an active subscription"
+    steps:
+      - step: 1
+        action: "Navigate to account/settings page"
+        expected: "Account details visible, edit options available"
+        verify_binary: "Account page renders AND email shown AND subscription status shown"
+      - step: 2
+        action: "Click cancel subscription"
+        expected: "Cancellation confirmation dialog appears"
+        verify_binary: "Confirmation dialog shown AND cancel button clearly labeled"
+      - step: 3
+        action: "Confirm cancellation"
+        expected: "Subscription cancelled, access continues until end of billing period"
+        verify_binary: "HTTP 2xx AND status shows 'cancelled' AND end date shown"
+    success_criteria: "User can cancel in 3 clicks or fewer, no support ticket required"
+    failure_means: "Violates trust. Creates support burden. May violate consumer protection laws."
+    current_status: "FAIL — no account settings page, no cancellation flow"
+
+# ---------------------------------------------------------------------------
+# PERFORMANCE THRESHOLDS (from product quality research)
+# ---------------------------------------------------------------------------
+performance_thresholds:
+  lcp_max_ms: 2500          # Largest Contentful Paint
+  inp_max_ms: 200           # Interaction to Next Paint
+  cls_max: 0.1              # Cumulative Layout Shift
+  api_p95_ms: 500           # API 95th percentile response time
+  button_feedback_ms: 100   # Visual feedback on any button click
+  streaming_first_token_ms: 1000  # First token of AI response
+  page_load_max_ms: 3000    # Full page load budget
+  time_to_first_value_min: 5     # Minutes from landing to first AI output
+
+# ---------------------------------------------------------------------------
+# MOBILE REQUIREMENTS (PERMANENT RULE #14)
+# ---------------------------------------------------------------------------
+mobile_requirements:
+  min_width_px: 375         # iPhone SE / smallest common mobile
+  touch_target_min_px: 44   # Apple HIG minimum
+  pwa_installable: true     # manifest.json + service worker + HTTPS
+  offline_support: true     # Service worker caching strategy
+  no_horizontal_scroll: true  # At 375px width
+  standalone_display: true  # No browser chrome when installed
+
+# ---------------------------------------------------------------------------
+# BILLING REQUIREMENTS
+# ---------------------------------------------------------------------------
+billing_requirements:
+  price_visible_before_signup: true
+  payment_flow_max_seconds: 60
+  cancellation_max_clicks: 3
+  self_service_cancellation: true
+
+# ---------------------------------------------------------------------------
+# POLISH REQUIREMENTS
+# ---------------------------------------------------------------------------
+polish_requirements:
+  zero_console_errors: true
+  custom_404_page: true
+  custom_500_page: true
+  loading_states_on_all_async: true
+  no_programmer_jargon_in_ui: true  # No "undefined", "null", "NaN", stack traces
+  empty_states_with_cta: true       # Never a blank screen
+  skeleton_screens_not_spinners: true
+  inline_form_validation: true
+
+# ---------------------------------------------------------------------------
+# OPERATIONS REQUIREMENTS
+# ---------------------------------------------------------------------------
+operations_requirements:
+  health_endpoint_with_deps: true     # /health returns dependency status
+  monitoring_dashboard: true
+  alerting_on_5xx: true
+  rollback_under_5_minutes: true
+  automated_daily_backups: true
+
+# ---------------------------------------------------------------------------
+# CURRENT OVERALL STATUS
+# ---------------------------------------------------------------------------
+current_status:
+  journeys_passing: 0
+  journeys_total: 7
+  p0_passing: 0
+  p0_total: 4
+  customer_readiness: "0/7 journeys pass. Product is at DEMO stage."
+  next_action: "Fix J001 (signup + first conversation). Nothing else matters until a stranger can use this."
