@@ -17,6 +17,7 @@ GET   /api/v1/voice/speak                 -- Kokoro TTS (public)
 
 from __future__ import annotations
 
+import asyncio
 import collections
 import datetime
 import hmac
@@ -26,12 +27,12 @@ import logging
 import os
 import threading
 import time
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from isg_agent.api.deps import CurrentUser, require_auth
+from isg_agent.api.deps import CurrentUser, get_current_user, require_admin, require_auth
 from isg_agent.integrations.voice_vapi import VapiConnector
 
 __all__ = ["router"]
@@ -49,6 +50,16 @@ _WEBHOOK_SEEN_LOCK = threading.Lock()
 
 # Max accepted webhook payload size (512 KB — Vapi payloads are <10 KB in practice)
 _WEBHOOK_MAX_BYTES = 512 * 1024
+
+# ---------------------------------------------------------------------------
+# Owner console — pending WebRTC calls store
+# Activated by env: VAPI_OWNER_CONSOLE_ENABLED=true
+# Maps call_id → {webCallUrl, caller_id, timestamp, status}
+# Bounded to 50 entries (oldest evicted). Owner joins via vapi.reconnect(webCallUrl).
+# ---------------------------------------------------------------------------
+_PENDING_OWNER_CALLS: collections.OrderedDict[str, dict] = collections.OrderedDict()
+_PENDING_CALLS_MAX = 50
+_PENDING_CALLS_LOCK = threading.Lock()
 
 router = APIRouter(
     prefix="/api/v1/voice",
@@ -376,14 +387,40 @@ async def vapi_webhook(request: Request) -> dict:
         func_name = func_call.get("name", "")
         params = func_call.get("parameters", {})
 
-        # Handle call transfer to owner (native Vapi transfer action)
+        # Handle call transfer to owner
         if func_name == "transfer_to_owner":
-            owner_cell = os.environ.get("OWNER_CELL_NUMBER", "")
-            caller_id = params.get("caller_id", message.get("call", {}).get("customer", {}).get("number", "unknown"))
+            call_obj = body.get("call", {})
+            caller_id = params.get("caller_id") or call_obj.get("customer", {}).get("number", "unknown")
             _notify_owner_call_transfer(caller_id)
-            logger.info("Transferring call to owner: caller=%s", caller_id)
+            logger.info("transfer_to_owner: caller=%s", caller_id)
+
+            # Tier 1 — WebRTC owner console (activated by VAPI_OWNER_CONSOLE_ENABLED=true)
+            if os.environ.get("VAPI_OWNER_CONSOLE_ENABLED", "").lower() == "true":
+                call_id = call_obj.get("id", _call_id)
+                # Extract webCallUrl from Vapi call transport object
+                web_call_url = (
+                    call_obj.get("transport", {}).get("callUrl")
+                    or call_obj.get("webCallUrl")
+                    or ""
+                )
+                with _PENDING_CALLS_LOCK:
+                    _PENDING_OWNER_CALLS[call_id] = {
+                        "call_id": call_id,
+                        "webCallUrl": web_call_url,
+                        "caller_id": caller_id,
+                        "timestamp": time.time(),
+                        "status": "pending",
+                    }
+                    _PENDING_OWNER_CALLS.move_to_end(call_id)
+                    if len(_PENDING_OWNER_CALLS) > _PENDING_CALLS_MAX:
+                        _PENDING_OWNER_CALLS.popitem(last=False)
+                logger.info("Owner console: stored pending call id=%s url_present=%s", call_id, bool(web_call_url))
+                return {"result": "Connecting you to the owner now — please hold for just a moment."}
+
+            # Tier 0 — PSTN fallback (default when console not enabled)
+            owner_cell = os.environ.get("OWNER_CELL_NUMBER", "")
             if not owner_cell:
-                logger.warning("OWNER_CELL_NUMBER not set -- cannot transfer call")
+                logger.warning("OWNER_CELL_NUMBER not set — cannot transfer call")
                 return {"result": "I'm sorry, I'm unable to transfer the call right now. Please try again later."}
             return {
                 "result": "Transferring you now.",
@@ -543,4 +580,113 @@ async def text_to_speech(text: str, voice: str = "kokoro") -> StreamingResponse:
         io.BytesIO(audio_bytes),
         media_type="audio/wav",
         headers={"X-Voice-Model": voice, "X-Text-Length": str(len(text))},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Owner console endpoints (admin-only)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/owner-console/pending",
+    summary="List pending WebRTC calls awaiting owner answer",
+)
+async def owner_console_pending(
+    current_user: CurrentUser = Depends(require_admin),
+) -> dict:
+    """Return all pending calls the owner can join via vapi.reconnect(webCallUrl).
+
+    Requires admin auth (ISG_AGENT_ADMIN_EMAIL).
+    """
+    with _PENDING_CALLS_LOCK:
+        calls = list(_PENDING_OWNER_CALLS.values())
+    return {"calls": calls, "count": len(calls)}
+
+
+@router.post(
+    "/owner-console/dismiss/{call_id}",
+    summary="Remove a call from the pending queue (answered or declined)",
+)
+async def owner_console_dismiss(
+    call_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+) -> dict:
+    """Mark a pending call as handled and remove it from the queue."""
+    with _PENDING_CALLS_LOCK:
+        removed = _PENDING_OWNER_CALLS.pop(call_id, None)
+    if removed is None:
+        raise HTTPException(status_code=404, detail="Call not found in pending queue")
+    logger.info("Owner console: dismissed call id=%s by admin=%s", call_id, current_user.email)
+    return {"status": "dismissed", "call_id": call_id}
+
+
+@router.get(
+    "/owner-console/stream",
+    summary="SSE stream of incoming calls for the owner console",
+)
+async def owner_console_stream(
+    request: Request,
+    token: str = Query(default=""),
+) -> StreamingResponse:
+    """Server-Sent Events stream that pushes new pending calls to the owner console.
+
+    Auth: pass JWT as ?token=<jwt> (EventSource API does not support headers).
+    The token is validated against the configured secret key.
+
+    Event format: ``data: <JSON>\\n\\n``
+    Keepalive comment every 15 s: ``: keepalive\\n\\n``
+    """
+    # Validate token from query param (EventSource cannot set Authorization header)
+    from isg_agent.core.config import get_settings
+    from isg_agent.api.routes.auth import verify_token
+
+    settings = get_settings()
+    admin_email = os.environ.get("ISG_AGENT_ADMIN_EMAIL", "").strip().lower()
+
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="token required")
+
+    payload = verify_token(token=token, secret_key=settings.secret_key)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token")
+
+    token_email = (payload.get("email") or payload.get("sub", "")).strip().lower()
+    if not admin_email or token_email != admin_email:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin required")
+
+    async def _event_generator() -> AsyncGenerator[str, None]:
+        last_seen_ts: float = time.time()
+        keepalive_countdown = 0
+        while True:
+            if await request.is_disconnected():
+                break
+
+            # Collect calls newer than last seen timestamp
+            with _PENDING_CALLS_LOCK:
+                new_calls = [
+                    v for v in _PENDING_OWNER_CALLS.values()
+                    if v["timestamp"] > last_seen_ts
+                ]
+
+            if new_calls:
+                last_seen_ts = time.time()
+                for call in new_calls:
+                    yield f"data: {json.dumps(call)}\n\n"
+            else:
+                keepalive_countdown += 1
+                if keepalive_countdown >= 15:
+                    yield ": keepalive\n\n"
+                    keepalive_countdown = 0
+
+            await asyncio.sleep(1)
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
