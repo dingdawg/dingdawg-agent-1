@@ -1,14 +1,14 @@
 {
   "name": "@dingdawg/sdk",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "DingDawg Agent SDK \u2014 durable AI agents with crash-proof exactly-once execution + IPFS checkpoints",
-  "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
       "types": "./dist/index.d.ts"
     }
   },
@@ -16,7 +16,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc -p tsconfig.cjs.json && node scripts/postbuild.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern='src/__tests__'",
     "typecheck": "tsc --noEmit"
   },

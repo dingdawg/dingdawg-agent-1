@@ -7,7 +7,7 @@
 
 export function MessageSkeleton() {
   return (
-    <div className="flex flex-col gap-1 mb-4 items-start" aria-hidden="true">
+    <div className="flex flex-col gap-1 mb-4 items-start" role="status" aria-label="Loading response..."  aria-live="polite">
       <div className="flex items-start gap-2">
         {/* Avatar circle */}
         <div className="h-7 w-7 rounded-full bg-white/10 animate-pulse flex-shrink-0 mt-0.5" />

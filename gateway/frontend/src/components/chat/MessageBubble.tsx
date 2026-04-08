@@ -99,7 +99,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
           </p>
         ) : isError ? (
           /* ── Error state with inline retry ── */
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2" role="alert" aria-live="assertive">
             <div className="flex items-start gap-2 text-red-400">
               <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
               <p className="text-[15px] font-body leading-relaxed">
