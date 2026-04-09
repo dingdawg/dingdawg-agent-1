@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from isg_agent.api.deps import CurrentUser, require_auth
 from isg_agent.brain.agent import AgentResponse, AgentRuntime
 from isg_agent.brain.session import SessionNotFoundError
-from isg_agent.schemas.messages import MessageRequest, MessageResponse
+from isg_agent.schemas.messages import ActionCard, MessageRequest, MessageResponse
 from isg_agent.schemas.sessions import SessionCreate, SessionList, SessionResponse
 
 __all__ = ["router"]
@@ -184,6 +184,9 @@ async def send_message(
         governance_decision=agent_response.governance_decision,
         convergence_status=agent_response.convergence_status,
         halted=agent_response.halted,
+        actions=[
+            ActionCard(**a) for a in agent_response.extra.get("actions", [])
+        ],
     )
 
 

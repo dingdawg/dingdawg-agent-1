@@ -1220,7 +1220,7 @@ async def configure_alerts(
             val = body[key]
             if not isinstance(val, int) or val < 0:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=f"'{key}' must be a non-negative integer.",
                 )
             _alert_thresholds[key] = val
@@ -1333,7 +1333,7 @@ async def admin_command(
     raw_command = body.get("command", "").strip()
     if not raw_command:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="'command' field is required and must not be empty.",
         )
 
@@ -1601,7 +1601,7 @@ async def get_priorities(
     now = _now_iso()
 
     # --- Priority 1: Stripe mode ---
-    stripe_key = s.stripe_secret_key or ""
+    stripe_key = (s.stripe_secret_key or "").strip()
     if stripe_key.startswith("sk_test_"):
         priorities.append({
             "category": "revenue",

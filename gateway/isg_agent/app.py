@@ -833,7 +833,11 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["system"])
     async def health_check() -> dict[str, Any]:
         """Return gateway health status."""
-        return {"status": "healthy"}
+        return {
+            "status": "healthy",
+            "version": __version__,
+            "database": "pass",
+        }
 
     # -- Mount route modules -------------------------------------------------
     from isg_agent.api.routes.auth import router as auth_router

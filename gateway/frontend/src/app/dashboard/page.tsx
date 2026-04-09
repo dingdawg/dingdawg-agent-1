@@ -880,6 +880,29 @@ function ChatDashboard() {
                     | "REVIEW"
                     | "HALT",
                 });
+                // Wire action cards from REST fallback response
+                if (res.actions && res.actions.length > 0) {
+                  const msgs = useChatStore.getState().messages;
+                  const lastId = msgs[msgs.length - 1]?.id;
+                  if (lastId) {
+                    const newCards: CardPayload[] = [];
+                    for (const ac of res.actions) {
+                      const card = mapSkillResultToCard({
+                        skill: ac.skill,
+                        action: ac.action,
+                        result: ac.data,
+                      });
+                      if (card) newCards.push(card);
+                    }
+                    if (newCards.length > 0) {
+                      setCardMap((prev) => {
+                        const next = new Map(prev);
+                        next.set(lastId, [...(next.get(lastId) ?? []), ...newCards]);
+                        return next;
+                      });
+                    }
+                  }
+                }
               })
               .catch((fbErr: unknown) => {
                 const fbMsg =

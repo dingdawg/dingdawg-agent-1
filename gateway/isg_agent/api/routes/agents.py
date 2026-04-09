@@ -8,8 +8,6 @@ All mutating endpoints require authentication via JWT Bearer token.
 The handle-check and DID resolution endpoints are public (no auth required).
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Optional
 

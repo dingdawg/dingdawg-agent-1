@@ -11,9 +11,23 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 __all__ = [
+    "ActionCard",
     "MessageRequest",
     "MessageResponse",
 ]
+
+
+class ActionCard(BaseModel):
+    """A structured UI card returned alongside an agent response.
+
+    Produced by the skill execution pipeline and consumed by the frontend
+    to render rich inline cards (KPI, calendar, confirmation, etc.).
+    """
+
+    type: str = Field(description="Card type matching frontend CardPayload.type")
+    data: dict = Field(default_factory=dict, description="Card-specific payload data")
+    skill: str = Field(default="", description="Skill that produced this card")
+    action: str = Field(default="", description="Action that was executed")
 
 
 class MessageRequest(BaseModel):
@@ -68,3 +82,7 @@ class MessageResponse(BaseModel):
     governance_decision: str = "PROCEED"
     convergence_status: str = "WITHIN_BUDGET"
     halted: bool = False
+    actions: list[ActionCard] = Field(
+        default_factory=list,
+        description="Structured action cards to render alongside the text response",
+    )

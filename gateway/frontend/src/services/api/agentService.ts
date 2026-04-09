@@ -34,6 +34,13 @@ export interface MessageRequest {
   content: string;
 }
 
+export interface ActionCard {
+  type: string;
+  data: Record<string, unknown>;
+  skill: string;
+  action: string;
+}
+
 export interface MessageResponse {
   content: string;
   session_id: string;
@@ -43,6 +50,7 @@ export interface MessageResponse {
   governance_decision: string;
   convergence_status: string;
   halted: boolean;
+  actions?: ActionCard[];
 }
 
 /**
