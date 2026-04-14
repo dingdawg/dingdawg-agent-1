@@ -969,7 +969,7 @@ function DdMainBridgePanel({
             Contact your DingDawg administrator to obtain a bridge connection token.
           </p>
           <a
-            href="https://dingdawg.com"
+            href="https://app.dingdawg.com"
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-[var(--gold-500)] hover:underline"

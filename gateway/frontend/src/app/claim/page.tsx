@@ -244,7 +244,7 @@ function ClaimFlow() {
           <p className="text-xs text-[var(--color-muted)] text-center">
             Free to start · 50 actions/mo ·{" "}
             <a
-              href="https://dingdawg.com/pricing"
+              href="/pricing"
               target="_blank"
               rel="noopener noreferrer"
               className="text-[var(--gold-500)] underline underline-offset-2 hover:opacity-80"

@@ -10,7 +10,6 @@
 import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MessageSquare, Calendar, Mail, BarChart2, Search } from "lucide-react";
-import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useAuthStore } from "@/store/authStore";
 import { useAgentStore } from "@/store/agentStore";
@@ -449,6 +448,32 @@ function generateQuickReplies(responseText: string): string[] {
 
   // Default quick replies
   return ["What can you do?", "Book appointment", "Check status", "Help"];
+}
+
+// ─── Quick Action Chips ───────────────────────────────────────────────────────────────
+
+const QUICK_CHIPS = [
+  { label: "Morning pulse", prompt: "Give me my morning business pulse" },
+  { label: "Book appointment", prompt: "Book a demo appointment for a new client this week" },
+  { label: "Check tasks", prompt: "Show me my active tasks" },
+  { label: "Send invoice", prompt: "Help me send an invoice to a client" },
+] as const;
+
+function QuickActionChips({ onSend }: { onSend: (prompt: string) => void }) {
+  return (
+    <div className="flex items-center gap-2 px-4 pb-2 pt-1 overflow-x-auto scrollbar-none flex-shrink-0">
+      {QUICK_CHIPS.map((chip) => (
+        <button
+          key={chip.label}
+          type="button"
+          onClick={() => onSend(chip.prompt)}
+          className="flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-medium border border-[var(--stroke2)] bg-white/[0.04] text-[var(--foreground)] hover:bg-[var(--gold-500)]/10 hover:border-[var(--gold-500)]/30 hover:text-[var(--gold-500)] transition-colors duration-150 whitespace-nowrap min-h-[44px]"
+        >
+          {chip.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ─── Chat Dashboard ────────────────────────────────────────────────────────────
@@ -1074,8 +1099,7 @@ function ChatDashboard() {
   );
 
   const handleDeleteSession = useCallback(
-    async (e: React.MouseEvent, sessionId: string) => {
-      e.stopPropagation();
+    async (sessionId: string) => {
       if (deletingSessionId === sessionId) {
         await storeDeleteSession(sessionId);
         setDeletingSessionId(null);
@@ -1139,15 +1163,13 @@ function ChatDashboard() {
     <div className="h-full flex overflow-hidden">
       {/* ── Chat-first fullscreen area ────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Minimal top bar — notification bell + settings */}
-        <div className="flex items-center justify-end px-4 h-12 border-b border-[var(--stroke)]/50 flex-shrink-0">
-          <div className="flex items-center gap-1">
-            <NotificationBell />
-            <a href="/settings" className="flex items-center justify-center h-9 w-9 min-h-[44px] min-w-[44px] rounded-lg text-[var(--color-muted)] hover:text-[var(--foreground)] hover:bg-white/5 transition-colors" aria-label="Settings">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-            </a>
-          </div>
-        </div>
+        {/* Agent command bar — stats, status, notifications, settings */}
+        <DashboardHeader
+          agentName={currentAgent.name}
+          handle={currentAgent.handle}
+          status="active"
+          stats={dashStats}
+        />
 
         {/* AI Disclosure — Oregon SB 1546 / FTC compliance */}
         <AIDisclosureBanner sessionId={activeSessionId} />
@@ -1254,6 +1276,9 @@ function ChatDashboard() {
                   </div>
                 </div>
 
+                {/* Quick action chips */}
+                <QuickActionChips onSend={handleSend} />
+
                 {/* Input bar — bottom anchored, full width like Gemini/Grok */}
                 <div className="bg-[var(--ink-950)] flex-shrink-0" ref={chatInputAreaRef}>
                   <div className="flex items-end max-w-2xl mx-auto w-full px-4">
@@ -1295,6 +1320,9 @@ function ChatDashboard() {
                 onRetry={handleRetry}
                 onIntegrationConnect={handleIntegrationConnect}
               />
+
+              {/* Quick action chips */}
+              <QuickActionChips onSend={handleSend} />
 
               {/* Input bar — bottom-anchored */}
               <div className="bg-[var(--ink-950)] flex-shrink-0" ref={chatInputAreaRef}>

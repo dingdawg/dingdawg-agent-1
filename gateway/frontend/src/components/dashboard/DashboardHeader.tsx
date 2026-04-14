@@ -16,6 +16,7 @@
 import Link from "next/link";
 import { Settings, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -169,6 +170,9 @@ export function DashboardHeader({
         >
           <Plug className="h-4 w-4" />
         </Link>
+
+        {/* Notification bell */}
+        <NotificationBell />
 
         {/* Settings icon link */}
         <Link

@@ -63,6 +63,9 @@ const NAV_ITEMS = [
   { label: "Tasks", icon: ClipboardList, path: "/tasks" },
 ] as const;
 
+/** Paths not yet available — greyed-out at 40% opacity, not navigable */
+const COMING_SOON_CHANNELS = new Set(["/operations", "/analytics"]);
+
 /* ────────────────────────────────────────────────────────────────────────── */
 /*  Helpers                                                                  */
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -245,10 +248,37 @@ function DesktopSidebarContent({
       {/* C) Nav Items */}
       <nav className={`flex-shrink-0 ${isCollapsed ? "px-2" : "px-3"} mt-1`}>
         {NAV_ITEMS.map((item) => {
+          const comingSoon = COMING_SOON_CHANNELS.has(item.path);
           const active =
-            item.path === "/operations"
-              ? currentPath.startsWith("/operations")
-              : currentPath === item.path;
+            !comingSoon &&
+            (item.path === "/dashboard"
+              ? currentPath === item.path
+              : currentPath.startsWith(item.path));
+
+          if (comingSoon) {
+            return (
+              <div
+                key={item.path}
+                className={`flex h-11 items-center rounded-xl mb-0.5 opacity-40 cursor-not-allowed text-[var(--foreground)] ${
+                  isCollapsed ? "justify-center px-2" : "gap-3 px-3"
+                }`}
+                title={isCollapsed ? `${item.label} — Coming Soon` : undefined}
+                aria-disabled="true"
+                role="menuitem"
+              >
+                <item.icon size={20} className="shrink-0" />
+                {!isCollapsed && (
+                  <>
+                    <span className="text-base truncate flex-1">{item.label}</span>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/10 text-[var(--color-muted)] tracking-wide uppercase leading-none">
+                      Soon
+                    </span>
+                  </>
+                )}
+              </div>
+            );
+          }
+
           return (
             <Link
               key={item.path}
@@ -449,10 +479,30 @@ function MobileSidebarContent({
       {/* Nav Items */}
       <nav className="px-3 mt-1 flex-shrink-0">
         {NAV_ITEMS.map((item) => {
+          const comingSoon = COMING_SOON_CHANNELS.has(item.path);
           const active =
-            item.path === "/operations"
-              ? currentPath.startsWith("/operations")
-              : currentPath === item.path;
+            !comingSoon &&
+            (item.path === "/dashboard"
+              ? currentPath === item.path
+              : currentPath.startsWith(item.path));
+
+          if (comingSoon) {
+            return (
+              <div
+                key={item.path}
+                className="flex h-12 items-center gap-3 rounded-xl px-3 text-base mb-0.5 opacity-40 cursor-not-allowed text-[var(--foreground)]"
+                aria-disabled="true"
+                role="menuitem"
+              >
+                <item.icon size={20} />
+                <span className="flex-1">{item.label}</span>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/10 text-[var(--color-muted)] tracking-wide uppercase leading-none">
+                  Soon
+                </span>
+              </div>
+            );
+          }
+
           return (
             <Link
               key={item.path}
