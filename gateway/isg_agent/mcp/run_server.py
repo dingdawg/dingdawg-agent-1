@@ -76,14 +76,17 @@ async def _initialize_app_state():
     from isg_agent.brain.session import SessionManager
     session_manager = SessionManager(db_path=db_path)
 
-    # Skill Executor with builtin skills
-    from isg_agent.skills.executor import SkillExecutor
-    skill_executor = SkillExecutor(workspace_root=".")
+    # Skill Executor with builtin skills — closed-source IP, not in Railway deploy
+    skill_executor = None
+    try:
+        from isg_agent.skills.executor import SkillExecutor
+        skill_executor = SkillExecutor(workspace_root=".")
 
-    # Register builtin skills
-    from isg_agent.skills.builtin import register_builtin_skills
-    registered = await register_builtin_skills(skill_executor, db_path)
-    logger.info("Registered %d builtin skills for MCP", len(registered))
+        from isg_agent.skills.builtin import register_builtin_skills
+        registered = await register_builtin_skills(skill_executor, db_path)
+        logger.info("Registered %d builtin skills for MCP", len(registered))
+    except ModuleNotFoundError:
+        logger.warning("Skill execution pipeline unavailable — running in degraded mode")
 
     # Usage Meter (best-effort)
     usage_meter = None

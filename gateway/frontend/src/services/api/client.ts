@@ -22,9 +22,13 @@ export function setAccessToken(token: string | null): void {
   if (typeof window !== "undefined") {
     if (token) {
       localStorage.setItem("access_token", token);
+      // Keep cookie in sync so Next.js middleware auth guard passes
+      document.cookie = `access_token=${token}; path=/; max-age=86400; SameSite=Lax; Secure`;
     } else {
       localStorage.removeItem("access_token");
       localStorage.removeItem("auth_user");
+      // Clear cookie on logout
+      document.cookie = "access_token=; path=/; max-age=0; SameSite=Lax; Secure";
     }
   }
 }
@@ -140,6 +144,15 @@ apiClient.interceptors.response.use(
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
           }
           return apiClient(originalRequest);
+        } else {
+          // Refresh returned 200 but no token — drain queue and redirect
+          const noTokenError = new Error("Refresh returned no access_token");
+          processQueue(noTokenError, null);
+          setAccessToken(null);
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
+          return Promise.reject(noTokenError);
         }
       } catch (refreshError) {
         processQueue(refreshError, null);

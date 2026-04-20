@@ -8,6 +8,7 @@ import WebVitalsReporter from "@/components/WebVitalsReporter";
 import CookieConsent from "@/components/CookieConsent";
 import { I18nProvider } from "@/lib/i18n";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
+import { LayoutEditor } from "@/components/dev/LayoutEditor";
 
 // ---------------------------------------------------------------------------
 // Self-hosted Google Fonts via next/font/google
@@ -234,6 +235,14 @@ export default function RootLayout({
            * the user has accepted or declined.
            */}
           <CookieConsent />
+
+          {/*
+           * Dev-only LayoutEditor: floating toolbar in top-right that lets
+           * you click + drag any element on the page and persist its
+           * position to localStorage. Renders only when
+           * NODE_ENV=development AND NEXT_PUBLIC_DEV_BYPASS_AUTH=1.
+           */}
+          <LayoutEditor />
           </GlobalErrorBoundary>
         </I18nProvider>
       </body>

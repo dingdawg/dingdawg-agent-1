@@ -13,11 +13,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Menu, ChevronRight } from "lucide-react";
+import { Menu, ChevronRight, Plug, Settings } from "lucide-react";
+import Link from "next/link";
 import { useAuthStore } from "@/store/authStore";
 import { useAgentStore } from "@/store/agentStore";
 import { useSessionStore } from "@/store/sessionStore";
 import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { AgenticAssistant } from "@/components/assistant/AgenticAssistant";
 import Sidebar from "./Sidebar";
 import { MobileBottomNav } from "./MobileBottomNav";
@@ -98,8 +100,15 @@ export function AppShell({ children }: AppShellProps) {
     );
   }
 
-  // Show error state if agent fetch failed
-  if (error && !isLoading && agents.length === 0) {
+  // Show error state if agent fetch failed.
+  // Dev-bypass: in NODE_ENV=development with NEXT_PUBLIC_DEV_BYPASS_AUTH=1 we
+  // render the normal shell with empty data instead of the full-screen error,
+  // so UI/layout work (e.g. right-rail chip placement) is visible without a
+  // live backend. Never fires in prod builds.
+  const devBypass =
+    process.env.NODE_ENV === "development" &&
+    process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === "1";
+  if (error && !isLoading && agents.length === 0 && !devBypass) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[var(--background)]">
         <div className="text-center p-8 max-w-md">
@@ -179,9 +188,9 @@ export function AppShell({ children }: AppShellProps) {
           {/* Spacer when sidebar is expanded on desktop */}
           {!desktopCollapsed && <div className="hidden md:block" />}
 
-          {/* Agent name center */}
+          {/* Agent name center — desktop only */}
           {currentAgent && (
-            <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-[var(--color-success)]" />
               <span className="text-sm font-medium text-[var(--foreground)]">
                 {currentAgent.name}
@@ -189,9 +198,43 @@ export function AppShell({ children }: AppShellProps) {
             </div>
           )}
 
-          {/* Right: language switcher */}
-          <div className="flex items-center gap-2">
-            <LanguageSwitcher />
+          {/* Right slot */}
+          <div className="flex items-center">
+            {/* Mobile: plug + bell + settings + ● Name @handle */}
+            <div className="flex md:hidden items-center gap-0.5">
+              <Link
+                href="/integrations"
+                className="flex items-center justify-center h-9 w-9 min-h-[44px] min-w-[44px] rounded-lg text-[var(--color-muted)] hover:text-[var(--foreground)] hover:bg-white/5 transition-colors"
+                aria-label="Integrations"
+              >
+                <Plug className="h-4 w-4" />
+              </Link>
+              <NotificationBell />
+              <Link
+                href="/settings"
+                className="flex items-center justify-center h-9 w-9 min-h-[44px] min-w-[44px] rounded-lg text-[var(--color-muted)] hover:text-[var(--gold-500)] hover:bg-white/5 transition-colors"
+                aria-label="Settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Link>
+              {currentAgent && (
+                <div className="flex items-center gap-1.5 pl-2 ml-1 border-l border-[var(--stroke)]/40">
+                  <span className="h-2 w-2 rounded-full bg-[var(--color-success)] flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-[var(--foreground)] leading-tight truncate max-w-[72px]">
+                      {currentAgent.name}
+                    </p>
+                    <p className="text-[10px] text-[var(--gold-500)] leading-tight truncate max-w-[72px]">
+                      @{currentAgent.handle}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Desktop: language switcher */}
+            <div className="hidden md:flex items-center gap-2">
+              <LanguageSwitcher />
+            </div>
           </div>
         </header>
 

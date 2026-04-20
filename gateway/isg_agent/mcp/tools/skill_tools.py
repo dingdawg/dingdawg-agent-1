@@ -12,7 +12,7 @@ Both tools return the standard ok/err envelope with an MCPReceipt
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from isg_agent.capabilities.shared.foundation import (
     err,
@@ -20,7 +20,12 @@ from isg_agent.capabilities.shared.foundation import (
     make_receipt,
     ok,
 )
-from isg_agent.skills.executor import SkillExecutor
+
+# SkillExecutor is closed-source IP excluded from Railway via .gitignore.
+# Import only at type-check time; annotations are lazy strings at runtime
+# because of `from __future__ import annotations` above.
+if TYPE_CHECKING:
+    from isg_agent.skills.executor import SkillExecutor
 
 __all__ = [
     "SKILL_DESCRIPTIONS",

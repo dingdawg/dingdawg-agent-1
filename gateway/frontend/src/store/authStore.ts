@@ -69,6 +69,20 @@ export const useAuthStore = create<AuthState>((set) => ({
   mfaChallenge: null,
 
   hydrate: () => {
+    // Dev-only bypass: if NODE_ENV=development AND the dev flag is set,
+    // inject a fake user so protected routes render without a real session.
+    // Mirrors middleware.ts — both need to pass to reach /dashboard.
+    // NEVER fires in production builds (NODE_ENV !== "development").
+    if (
+      process.env.NODE_ENV === "development" &&
+      process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === "1"
+    ) {
+      const devUser: User = { id: "dev-local", email: "dev@localhost" };
+      setAccessToken("dev-local-bypass-token");
+      set({ user: devUser, isAuthenticated: true, isHydrated: true });
+      return;
+    }
+
     const token = loadStoredToken();
     const user = loadStoredUser();
     if (token && user) {

@@ -34,11 +34,13 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 import stripe
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+import uuid
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 from isg_agent.api.deps import CurrentUser, require_auth
@@ -157,7 +159,7 @@ class CheckoutSessionRequest(BaseModel):
 
     plan: str      # pro, team, enterprise
     billing: str = "monthly"  # monthly or annual
-    agent_id: str
+    agent_id: str = ""  # Optional — empty string means platform-level subscription
     success_url: str = ""  # Override — defaults to /billing?success=true
     cancel_url: str = ""   # Override — defaults to /billing?canceled=true
 
@@ -317,34 +319,63 @@ async def create_checkout_session(
     success_url = body.success_url or f"{domain}/billing?success=true&session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = body.cancel_url or f"{domain}/billing?canceled=true"
 
-    # Find or create Stripe customer for this user
+    # -----------------------------------------------------------------------
+    # HARDENED customer lookup — 3-layer, no eventual consistency risk.
+    #
+    # Layer 1: Our DB (usage_subscriptions) — zero API calls, always fresh.
+    # Layer 2: stripe.Customer.list(email=) — STRONGLY consistent (not search).
+    #          stripe.Customer.search() is eventually consistent (up to 1hr lag).
+    #          NEVER use search() in a checkout flow.
+    # Layer 3: Create new customer — UUID idempotency key per attempt (not per
+    #          user), so the same user can checkout multiple plans without
+    #          hitting Stripe's "same key, different params" IdempotencyError.
+    # -----------------------------------------------------------------------
     try:
-        # Look for existing customer by metadata
-        existing = stripe.Customer.search(
-            query=f'metadata["user_id"]:"{user.user_id}"',
-            limit=1,
-        )
-        if existing.data:
-            customer_id = existing.data[0].id
-        else:
-            customer = stripe.Customer.create(
+        customer_id = ""
+
+        # Layer 1: Check our own DB first — authoritative, zero network call.
+        meter = _get_usage_meter(request)
+        if meter is not None:
+            try:
+                sub = await meter.get_user_subscription(
+                    agent_id=body.agent_id or "default",
+                    user_id=user.user_id,
+                )
+                if sub:
+                    customer_id = sub.get("stripe_customer_id", "")
+            except Exception as _db_err:
+                logger.debug("DB stripe_customer_id lookup failed: %s", _db_err)
+
+        # Layer 2: stripe.Customer.list(email=) — strongly consistent.
+        if not customer_id:
+            by_email = await stripe.Customer.list_async(email=user.email, limit=1)
+            if by_email.data:
+                customer_id = by_email.data[0].id
+
+        # Layer 3: Create — fresh UUID idempotency key (not user-scoped key,
+        # which would collide across different plan/agent_id combos).
+        if not customer_id:
+            customer = await stripe.Customer.create_async(
                 email=user.email,
                 metadata={
                     "user_id": user.user_id,
                     "agent_id": body.agent_id,
                     "platform": "isg_agent_1",
                 },
-                idempotency_key=f"customer-{user.user_id}",
+                idempotency_key=str(uuid.uuid4()),
             )
             customer_id = customer.id
 
-        session = stripe.checkout.Session.create(
+        session = await stripe.checkout.Session.create_async(
             customer=customer_id,
             payment_method_types=["card"],
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
             success_url=success_url,
             cancel_url=cancel_url,
+            # client_reference_id = fallback user lookup in webhooks if
+            # customer metadata is missing. Always set this.
+            client_reference_id=user.user_id,
             subscription_data={
                 "metadata": {
                     "user_id": user.user_id,
@@ -353,6 +384,7 @@ async def create_checkout_session(
                     "platform": "isg_agent_1",
                 }
             },
+            # metadata on the session itself (for checkout.session.completed)
             metadata={
                 "user_id": user.user_id,
                 "agent_id": body.agent_id,
@@ -443,7 +475,7 @@ async def create_billing_portal(
     # Fallback: search Stripe directly by user metadata
     if not stripe_customer_id:
         try:
-            existing = stripe.Customer.search(
+            existing = await stripe.Customer.search_async(
                 query=f'metadata["user_id"]:"{user.user_id}"',
                 limit=1,
             )
@@ -462,7 +494,7 @@ async def create_billing_portal(
     return_url = f"{domain}/billing"
 
     try:
-        portal_session = stripe.billing_portal.Session.create(
+        portal_session = await stripe.billing_portal.Session.create_async(
             customer=stripe_customer_id,
             return_url=return_url,
         )
@@ -532,7 +564,7 @@ async def get_subscription_status(
     # If we have a Stripe subscription ID, fetch live status
     if stripe_sub_id:
         try:
-            stripe_sub = stripe.Subscription.retrieve(stripe_sub_id)
+            stripe_sub = await stripe.Subscription.retrieve_async(stripe_sub_id)
             return SubscriptionStatusResponse(
                 plan=sub.get("plan", "free"),
                 stripe_status=stripe_sub.status,
@@ -617,12 +649,251 @@ async def create_payment_intent(
     )
 
 
+async def _process_stripe_event(
+    event: dict,
+    meter: Any,
+    audit_chain: Any,
+    gate: Any,
+) -> None:
+    """Background processor for Stripe webhook events.
+
+    Runs AFTER the route has already returned 200 to Stripe.  All business
+    logic (subscription provisioning, dunning, audit) lives here so we never
+    risk a Stripe delivery timeout (30s) from slow DB or downstream calls.
+    """
+    event_type = event.get("type", "unknown")
+    event_id = event.get("id", "")
+    data_object = event.get("data", {}).get("object", {})
+
+    try:
+        if event_type == "checkout.session.completed":
+            metadata = data_object.get("metadata", {})
+            user_id = metadata.get("user_id", "") or data_object.get("client_reference_id", "")
+            agent_id = metadata.get("agent_id", "")
+            plan = metadata.get("plan", "starter")
+            stripe_customer_id = data_object.get("customer", "")
+            stripe_subscription_id = data_object.get("subscription", "")
+
+            if user_id and meter:
+                try:
+                    await meter.create_subscription(
+                        agent_id=agent_id or "default",
+                        user_id=user_id,
+                        plan=plan,
+                        stripe_customer_id=stripe_customer_id,
+                        stripe_subscription_id=stripe_subscription_id,
+                    )
+                    logger.info(
+                        "Checkout completed: user=%s plan=%s sub=%s",
+                        user_id, plan, stripe_subscription_id,
+                    )
+                except Exception as exc:
+                    logger.error("Failed to activate subscription from checkout: %s", exc)
+
+            if user_id and gate is not None:
+                gate.mark_paid(user_id)
+
+            if audit_chain and user_id:
+                await audit_chain.record(
+                    event_type="checkout_session_completed",
+                    actor=user_id,
+                    details={
+                        "session_id": data_object.get("id", ""),
+                        "plan": plan,
+                        "agent_id": agent_id,
+                        "stripe_subscription_id": stripe_subscription_id,
+                    },
+                )
+
+        elif event_type == "customer.subscription.created":
+            stripe_subscription_id = data_object.get("id", "")
+            stripe_customer_id = data_object.get("customer", "")
+            sub_metadata = data_object.get("metadata", {})
+            user_id = sub_metadata.get("user_id", "")
+            agent_id = sub_metadata.get("agent_id", "")
+            items_data = data_object.get("items", {}).get("data", [])
+            plan = sub_metadata.get("plan", "")
+            if not plan and items_data:
+                price_meta = items_data[0].get("price", {}).get("metadata", {})
+                plan = price_meta.get("plan", "")
+            plan = plan or "starter"
+
+            if user_id and meter:
+                try:
+                    await meter.create_subscription(
+                        agent_id=agent_id or "default",
+                        user_id=user_id,
+                        plan=plan,
+                        stripe_customer_id=stripe_customer_id,
+                        stripe_subscription_id=stripe_subscription_id,
+                    )
+                except Exception as exc:
+                    logger.error("subscription.created handler failed (sub=%s): %s", stripe_subscription_id, exc)
+
+            if user_id and gate is not None:
+                gate.mark_paid(user_id)
+
+            if audit_chain and user_id:
+                await audit_chain.record(
+                    event_type="subscription_created_webhook",
+                    actor=user_id,
+                    details={
+                        "stripe_subscription_id": stripe_subscription_id,
+                        "stripe_customer_id": stripe_customer_id,
+                        "plan": plan,
+                        "agent_id": agent_id,
+                    },
+                )
+
+        elif event_type == "customer.subscription.updated":
+            stripe_subscription_id = data_object.get("id", "")
+            stripe_customer_id = data_object.get("customer", "")
+            sub_metadata = data_object.get("metadata", {})
+            user_id = sub_metadata.get("user_id", "")
+            agent_id = sub_metadata.get("agent_id", "")
+            stripe_status = data_object.get("status", "")
+            items_data = data_object.get("items", {}).get("data", [])
+            plan = sub_metadata.get("plan", "")
+            if not plan and items_data:
+                price_meta = items_data[0].get("price", {}).get("metadata", {})
+                plan = price_meta.get("plan", "")
+
+            if meter and stripe_subscription_id:
+                if stripe_status in ("canceled", "unpaid"):
+                    try:
+                        await meter.deactivate_subscription_by_stripe_id(stripe_subscription_id)
+                    except Exception as exc:
+                        logger.error("deactivate on subscription.updated failed: %s", exc)
+                elif stripe_status in ("active", "trialing") and plan:
+                    try:
+                        updated = await meter.update_subscription_plan_by_stripe_id(
+                            stripe_subscription_id=stripe_subscription_id,
+                            new_plan=plan,
+                            stripe_customer_id=stripe_customer_id,
+                        )
+                        if not updated and user_id:
+                            await meter.create_subscription(
+                                agent_id=agent_id or "default",
+                                user_id=user_id,
+                                plan=plan,
+                                stripe_customer_id=stripe_customer_id,
+                                stripe_subscription_id=stripe_subscription_id,
+                            )
+                    except Exception as exc:
+                        logger.error("update plan on subscription.updated failed: %s", exc)
+
+            if audit_chain:
+                await audit_chain.record(
+                    event_type="subscription_updated_webhook",
+                    actor=user_id or stripe_customer_id,
+                    details={
+                        "stripe_subscription_id": stripe_subscription_id,
+                        "stripe_customer_id": stripe_customer_id,
+                        "plan": plan,
+                        "stripe_status": stripe_status,
+                        "agent_id": agent_id,
+                    },
+                )
+
+        elif event_type == "invoice.paid":
+            stripe_customer_id = data_object.get("customer", "")
+            stripe_subscription_id = data_object.get("subscription", "")
+            if meter and stripe_subscription_id:
+                try:
+                    reactivated = await meter.reactivate_subscription_by_stripe_id(stripe_subscription_id)
+                    if reactivated:
+                        logger.info("Subscription re-activated via dunning recovery: sub=%s", stripe_subscription_id)
+                except Exception as exc:
+                    logger.error("reactivate on invoice.paid failed: %s", exc)
+            if audit_chain:
+                await audit_chain.record(
+                    event_type="invoice_paid",
+                    actor=stripe_customer_id,
+                    details={"invoice_id": data_object.get("id", ""), "amount_paid": data_object.get("amount_paid", 0), "stripe_subscription_id": stripe_subscription_id},
+                )
+
+        elif event_type == "invoice.payment_succeeded":
+            stripe_customer_id = data_object.get("customer", "")
+            stripe_subscription_id = data_object.get("subscription", "")
+            if meter and stripe_subscription_id:
+                try:
+                    await meter.reactivate_subscription_by_stripe_id(stripe_subscription_id)
+                except Exception as exc:
+                    logger.error("reactivate on invoice.payment_succeeded failed: %s", exc)
+            if audit_chain:
+                await audit_chain.record(
+                    event_type="invoice_payment_succeeded",
+                    actor=stripe_customer_id,
+                    details={"invoice_id": data_object.get("id", ""), "amount_paid": data_object.get("amount_paid", 0), "stripe_subscription_id": stripe_subscription_id},
+                )
+
+        elif event_type == "invoice.payment_failed":
+            stripe_customer_id = data_object.get("customer", "")
+            stripe_subscription_id = data_object.get("subscription", "")
+            if meter and stripe_subscription_id:
+                try:
+                    await meter.deactivate_subscription_by_stripe_id(stripe_subscription_id)
+                except Exception as exc:
+                    logger.error("deactivate on invoice.payment_failed failed: %s", exc)
+            if audit_chain:
+                await audit_chain.record(
+                    event_type="invoice_payment_failed",
+                    actor=stripe_customer_id,
+                    details={"invoice_id": data_object.get("id", ""), "stripe_subscription_id": stripe_subscription_id},
+                )
+
+        elif event_type == "customer.subscription.deleted":
+            stripe_customer_id = data_object.get("customer", "")
+            stripe_subscription_id = data_object.get("id", "")
+            sub_metadata = data_object.get("metadata", {})
+            user_id = sub_metadata.get("user_id", "")
+            agent_id = sub_metadata.get("agent_id", "")
+            if meter and stripe_subscription_id:
+                try:
+                    await meter.deactivate_subscription_by_stripe_id(stripe_subscription_id)
+                except Exception as exc:
+                    logger.error("deactivate on subscription.deleted failed: %s", exc)
+            if audit_chain:
+                await audit_chain.record(
+                    event_type="subscription_canceled",
+                    actor=user_id or stripe_customer_id,
+                    details={"stripe_subscription_id": stripe_subscription_id, "agent_id": agent_id},
+                )
+
+        elif event_type == "payment_intent.succeeded":
+            metadata = data_object.get("metadata", {})
+            user_id = metadata.get("user_id", "")
+            if user_id and gate is not None:
+                gate.mark_paid(user_id)
+                if audit_chain:
+                    await audit_chain.record(
+                        event_type="payment_succeeded",
+                        actor=user_id,
+                        details={"payment_intent_id": data_object.get("id", ""), "amount": data_object.get("amount", 0)},
+                    )
+
+        else:
+            logger.debug("Unhandled webhook event type: %s", event_type)
+
+        # Mark processed AFTER successful handling
+        if event_id and meter is not None:
+            await meter.mark_event_processed(event_id, event_type)
+
+    except Exception as exc:
+        logger.error(
+            "Background webhook processing failed event_id=%s type=%s: %s",
+            event_id, event_type, exc, exc_info=True,
+        )
+        # Do NOT re-raise — Stripe already got 200, retrying won't help.
+        # Log to monitoring. Use a dead-letter queue for critical recovery.
+
+
 @router.post(
     "/webhook",
     response_model=WebhookResponse,
     summary="Stripe webhook handler",
 )
-async def stripe_webhook(request: Request) -> WebhookResponse:
+async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) -> WebhookResponse:
     """Handle Stripe webhook events.
 
     Verifies the webhook signature using the configured webhook secret.
@@ -694,368 +965,21 @@ async def stripe_webhook(request: Request) -> WebhookResponse:
             return WebhookResponse(received=True, event_type=event_type)
 
     # ------------------------------------------------------------------
-    # checkout.session.completed — user paid, activate subscription
+    # Dispatch to background processor — return 200 immediately.
+    #
+    # Stripe retries any webhook that doesn't get a 2xx within 30s.
+    # All business logic (DB writes, audit, dunning) runs in the
+    # background AFTER we've already acked Stripe.  The _process_stripe_event
+    # helper handles idempotency marking and all event types.
     # ------------------------------------------------------------------
-    if event_type == "checkout.session.completed":
-        metadata = data_object.get("metadata", {})
-        user_id = metadata.get("user_id", "")
-        agent_id = metadata.get("agent_id", "")
-        plan = metadata.get("plan", "starter")
-        stripe_customer_id = data_object.get("customer", "")
-        stripe_subscription_id = data_object.get("subscription", "")
-
-        if user_id and meter:
-            try:
-                await meter.create_subscription(
-                    agent_id=agent_id or "default",
-                    user_id=user_id,
-                    plan=plan,
-                    stripe_customer_id=stripe_customer_id,
-                    stripe_subscription_id=stripe_subscription_id,
-                )
-                logger.info(
-                    "Checkout completed: user=%s plan=%s sub=%s",
-                    user_id, plan, stripe_subscription_id,
-                )
-            except Exception as exc:
-                logger.error("Failed to activate subscription from checkout: %s", exc)
-
-        # Also mark user as paid in the legacy gate
-        if user_id:
-            gate = _get_payment_gate(request)
-            gate.mark_paid(user_id)
-
-        if audit_chain and user_id:
-            await audit_chain.record(
-                event_type="checkout_session_completed",
-                actor=user_id,
-                details={
-                    "session_id": data_object.get("id", ""),
-                    "plan": plan,
-                    "agent_id": agent_id,
-                    "stripe_subscription_id": stripe_subscription_id,
-                },
-            )
-
-        if event_id and meter is not None:
-            await meter.mark_event_processed(event_id, event_type)
-
-    # ------------------------------------------------------------------
-    # customer.subscription.created — Stripe subscription object created
-    # Fires after checkout.session.completed but carries canonical plan
-    # metadata directly on the subscription object.  We upsert the DB
-    # record so the row is always consistent with Stripe's truth.
-    # ------------------------------------------------------------------
-    elif event_type == "customer.subscription.created":
-        stripe_subscription_id = data_object.get("id", "")
-        stripe_customer_id = data_object.get("customer", "")
-        sub_metadata = data_object.get("metadata", {})
-        user_id = sub_metadata.get("user_id", "")
-        agent_id = sub_metadata.get("agent_id", "")
-        # Resolve plan from Stripe items list → first item's price metadata/nickname
-        items_data = data_object.get("items", {}).get("data", [])
-        plan = sub_metadata.get("plan", "")
-        if not plan and items_data:
-            price_meta = items_data[0].get("price", {}).get("metadata", {})
-            plan = price_meta.get("plan", "")
-        plan = plan or "starter"  # Default when not resolvable
-
-        logger.info(
-            "Subscription created: customer=%s sub=%s plan=%s user=%s",
-            stripe_customer_id, stripe_subscription_id, plan, user_id,
-        )
-
-        if user_id and meter:
-            try:
-                await meter.create_subscription(
-                    agent_id=agent_id or "default",
-                    user_id=user_id,
-                    plan=plan,
-                    stripe_customer_id=stripe_customer_id,
-                    stripe_subscription_id=stripe_subscription_id,
-                )
-            except Exception as exc:
-                logger.error(
-                    "Failed to create subscription on subscription.created (sub=%s): %s",
-                    stripe_subscription_id, exc,
-                )
-
-        if user_id:
-            gate = _get_payment_gate(request)
-            gate.mark_paid(user_id)
-
-        if audit_chain and user_id:
-            await audit_chain.record(
-                event_type="subscription_created_webhook",
-                actor=user_id,
-                details={
-                    "stripe_subscription_id": stripe_subscription_id,
-                    "stripe_customer_id": stripe_customer_id,
-                    "plan": plan,
-                    "agent_id": agent_id,
-                },
-            )
-
-        if event_id and meter is not None:
-            await meter.mark_event_processed(event_id, event_type)
-
-    # ------------------------------------------------------------------
-    # customer.subscription.updated — plan upgrade/downgrade/renewal
-    # Fires when any attribute of the subscription changes: plan switch,
-    # trial end, quantity change, etc.  We sync the plan tier in the DB.
-    # ------------------------------------------------------------------
-    elif event_type == "customer.subscription.updated":
-        stripe_subscription_id = data_object.get("id", "")
-        stripe_customer_id = data_object.get("customer", "")
-        sub_metadata = data_object.get("metadata", {})
-        user_id = sub_metadata.get("user_id", "")
-        agent_id = sub_metadata.get("agent_id", "")
-        # Stripe status: active, past_due, canceled, trialing, unpaid
-        stripe_status = data_object.get("status", "")
-        # Resolve plan from items list or metadata
-        items_data = data_object.get("items", {}).get("data", [])
-        plan = sub_metadata.get("plan", "")
-        if not plan and items_data:
-            price_meta = items_data[0].get("price", {}).get("metadata", {})
-            plan = price_meta.get("plan", "")
-
-        logger.info(
-            "Subscription updated: customer=%s sub=%s plan=%s status=%s",
-            stripe_customer_id, stripe_subscription_id, plan, stripe_status,
-        )
-
-        if meter and stripe_subscription_id:
-            # Handle status-based transitions
-            if stripe_status in ("canceled", "unpaid"):
-                try:
-                    await meter.deactivate_subscription_by_stripe_id(stripe_subscription_id)
-                except Exception as exc:
-                    logger.error(
-                        "Failed to deactivate subscription on subscription.updated (sub=%s): %s",
-                        stripe_subscription_id, exc,
-                    )
-            elif stripe_status in ("active", "trialing") and plan:
-                try:
-                    updated = await meter.update_subscription_plan_by_stripe_id(
-                        stripe_subscription_id=stripe_subscription_id,
-                        new_plan=plan,
-                        stripe_customer_id=stripe_customer_id,
-                    )
-                    if not updated and user_id:
-                        # Row may not exist yet (race with subscription.created) — upsert
-                        await meter.create_subscription(
-                            agent_id=agent_id or "default",
-                            user_id=user_id,
-                            plan=plan,
-                            stripe_customer_id=stripe_customer_id,
-                            stripe_subscription_id=stripe_subscription_id,
-                        )
-                except Exception as exc:
-                    logger.error(
-                        "Failed to update plan on subscription.updated (sub=%s): %s",
-                        stripe_subscription_id, exc,
-                    )
-
-        if audit_chain:
-            await audit_chain.record(
-                event_type="subscription_updated_webhook",
-                actor=user_id or stripe_customer_id,
-                details={
-                    "stripe_subscription_id": stripe_subscription_id,
-                    "stripe_customer_id": stripe_customer_id,
-                    "plan": plan,
-                    "stripe_status": stripe_status,
-                    "agent_id": agent_id,
-                },
-            )
-
-        if event_id and meter is not None:
-            await meter.mark_event_processed(event_id, event_type)
-
-    # ------------------------------------------------------------------
-    # invoice.paid — subscription renewed or dunning recovered
-    # ------------------------------------------------------------------
-    elif event_type == "invoice.paid":
-        stripe_customer_id = data_object.get("customer", "")
-        stripe_subscription_id = data_object.get("subscription", "")
-        logger.info(
-            "Invoice paid: customer=%s subscription=%s",
-            stripe_customer_id, stripe_subscription_id,
-        )
-
-        # Dunning recovery: if this subscription was deactivated due to a
-        # prior invoice.payment_failed, re-activate it now that payment
-        # succeeded. This is a no-op for subscriptions already active.
-        if meter and stripe_subscription_id:
-            try:
-                reactivated = await meter.reactivate_subscription_by_stripe_id(
-                    stripe_subscription_id
-                )
-                if reactivated:
-                    logger.info(
-                        "Subscription re-activated via dunning recovery: sub=%s customer=%s",
-                        stripe_subscription_id, stripe_customer_id,
-                    )
-            except Exception as exc:
-                logger.error(
-                    "Failed to re-activate subscription on invoice.paid (sub=%s): %s",
-                    stripe_subscription_id, exc,
-                )
-
-        if audit_chain:
-            await audit_chain.record(
-                event_type="invoice_paid",
-                actor=stripe_customer_id,
-                details={
-                    "invoice_id": data_object.get("id", ""),
-                    "amount_paid": data_object.get("amount_paid", 0),
-                    "stripe_subscription_id": stripe_subscription_id,
-                },
-            )
-
-        if event_id and meter is not None:
-            await meter.mark_event_processed(event_id, event_type)
-
-    # ------------------------------------------------------------------
-    # invoice.payment_succeeded — explicit payment success confirmation
-    # Stripe fires this alongside invoice.paid.  We treat it identically:
-    # clear any payment-failure flag and re-activate if needed.
-    # ------------------------------------------------------------------
-    elif event_type == "invoice.payment_succeeded":
-        stripe_customer_id = data_object.get("customer", "")
-        stripe_subscription_id = data_object.get("subscription", "")
-        logger.info(
-            "Invoice payment succeeded: customer=%s subscription=%s",
-            stripe_customer_id, stripe_subscription_id,
-        )
-
-        if meter and stripe_subscription_id:
-            try:
-                reactivated = await meter.reactivate_subscription_by_stripe_id(
-                    stripe_subscription_id
-                )
-                if reactivated:
-                    logger.info(
-                        "Subscription re-activated via invoice.payment_succeeded: sub=%s",
-                        stripe_subscription_id,
-                    )
-            except Exception as exc:
-                logger.error(
-                    "Failed to re-activate on invoice.payment_succeeded (sub=%s): %s",
-                    stripe_subscription_id, exc,
-                )
-
-        if audit_chain:
-            await audit_chain.record(
-                event_type="invoice_payment_succeeded",
-                actor=stripe_customer_id,
-                details={
-                    "invoice_id": data_object.get("id", ""),
-                    "amount_paid": data_object.get("amount_paid", 0),
-                    "stripe_subscription_id": stripe_subscription_id,
-                },
-            )
-
-        if event_id and meter is not None:
-            await meter.mark_event_processed(event_id, event_type)
-
-    # ------------------------------------------------------------------
-    # invoice.payment_failed — card declined or expired
-    # ------------------------------------------------------------------
-    elif event_type == "invoice.payment_failed":
-        stripe_customer_id = data_object.get("customer", "")
-        stripe_subscription_id = data_object.get("subscription", "")
-        logger.warning(
-            "Invoice payment failed: customer=%s subscription=%s",
-            stripe_customer_id, stripe_subscription_id,
-        )
-        # Deactivate the subscription in the DB so access is revoked until payment recovers
-        if meter and stripe_subscription_id:
-            try:
-                await meter.deactivate_subscription_by_stripe_id(stripe_subscription_id)
-            except Exception as exc:
-                logger.error(
-                    "Failed to deactivate subscription on payment_failed (sub=%s): %s",
-                    stripe_subscription_id, exc,
-                )
-        if audit_chain:
-            await audit_chain.record(
-                event_type="invoice_payment_failed",
-                actor=stripe_customer_id,
-                details={
-                    "invoice_id": data_object.get("id", ""),
-                    "stripe_subscription_id": stripe_subscription_id,
-                },
-            )
-
-        if event_id and meter is not None:
-            await meter.mark_event_processed(event_id, event_type)
-
-    # ------------------------------------------------------------------
-    # customer.subscription.deleted — canceled or expired
-    # ------------------------------------------------------------------
-    elif event_type == "customer.subscription.deleted":
-        stripe_customer_id = data_object.get("customer", "")
-        stripe_subscription_id = data_object.get("id", "")
-        sub_metadata = data_object.get("metadata", {})
-        user_id = sub_metadata.get("user_id", "")
-        agent_id = sub_metadata.get("agent_id", "")
-
-        logger.info(
-            "Subscription canceled: customer=%s sub=%s",
-            stripe_customer_id, stripe_subscription_id,
-        )
-
-        # Deactivate the subscription in the DB so access is revoked immediately
-        if meter and stripe_subscription_id:
-            try:
-                await meter.deactivate_subscription_by_stripe_id(stripe_subscription_id)
-            except Exception as exc:
-                logger.error(
-                    "Failed to deactivate subscription on subscription.deleted (sub=%s): %s",
-                    stripe_subscription_id, exc,
-                )
-
-        if audit_chain:
-            await audit_chain.record(
-                event_type="subscription_canceled",
-                actor=user_id or stripe_customer_id,
-                details={
-                    "stripe_subscription_id": stripe_subscription_id,
-                    "agent_id": agent_id,
-                },
-            )
-
-        if event_id and meter is not None:
-            await meter.mark_event_processed(event_id, event_type)
-
-    # ------------------------------------------------------------------
-    # payment_intent.succeeded — legacy $1/action flow
-    # ------------------------------------------------------------------
-    elif event_type == "payment_intent.succeeded":
-        metadata = data_object.get("metadata", {})
-        user_id = metadata.get("user_id", "")
-
-        if user_id:
-            gate = _get_payment_gate(request)
-            gate.mark_paid(user_id)
-            logger.info("PaymentIntent succeeded for user %s", user_id)
-
-            if audit_chain is not None:
-                await audit_chain.record(
-                    event_type="payment_succeeded",
-                    actor=user_id,
-                    details={
-                        "payment_intent_id": data_object.get("id", ""),
-                        "amount": data_object.get("amount", 0),
-                    },
-                )
-
-            if event_id and meter is not None:
-                await meter.mark_event_processed(event_id, event_type)
-    else:
-        logger.debug("Unhandled webhook event type: %s", event_type)
-
+    gate = _get_payment_gate(request)
+    background_tasks.add_task(
+        _process_stripe_event,
+        dict(event),
+        meter,
+        audit_chain,
+        gate,
+    )
     return WebhookResponse(received=True, event_type=event_type)
 
 

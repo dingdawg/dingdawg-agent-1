@@ -29,9 +29,17 @@ function HandoffInner() {
       return;
     }
 
+    // Store token — 'access_token' matches what middleware + setAccessToken use
+    localStorage.setItem('access_token', token);
     localStorage.setItem('dd_token', token);
     if (userId) localStorage.setItem('dd_user_id', userId);
-    if (email) localStorage.setItem('dd_email', email);
+    if (email) {
+      localStorage.setItem('dd_email', email);
+      localStorage.setItem('auth_user', JSON.stringify({ id: userId ?? '', email }));
+    }
+
+    // Set cookie so Next.js middleware auth guard recognises the session
+    document.cookie = `access_token=${token}; path=/; max-age=86400; SameSite=Lax; Secure`;
 
     router.replace(welcome === '1' ? '/dashboard?welcome=1' : '/dashboard');
   }, [router, params]);

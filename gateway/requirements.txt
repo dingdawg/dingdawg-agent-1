@@ -15,3 +15,4 @@ google-auth-oauthlib>=1.2.0
 google-auth>=2.25.0
 sentry-sdk[fastapi]==2.19.2
 pyotp==2.9.0
+resend>=2.0.0

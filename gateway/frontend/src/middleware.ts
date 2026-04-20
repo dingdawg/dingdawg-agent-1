@@ -127,6 +127,23 @@ function hasValidToken(request: NextRequest): boolean {
 export function middleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Dev-only auth bypass. Activated ONLY when NODE_ENV=development AND the
+  // explicit flag NEXT_PUBLIC_DEV_BYPASS_AUTH=1 is set. Never fires in
+  // production bundles — NODE_ENV=production stops this cold.
+  //
+  // Purpose: lets the Tauri desktop shell (and local Next dev) render
+  // protected routes like /dashboard without a live backend session, so we
+  // can design + validate UI changes without needing real JWTs. If you see
+  // this string in a prod log, something is very wrong with the build.
+  // ──────────────────────────────────────────────────────────────────────────
+  if (
+    process.env.NODE_ENV === "development" &&
+    process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === "1"
+  ) {
+    return NextResponse.next();
+  }
+
   // Always let public routes through
   if (isPublicRoute(pathname)) {
     return NextResponse.next();

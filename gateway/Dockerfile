@@ -17,12 +17,12 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy dependency specification first for layer caching
+# Copy full source so all submodules are installed into site-packages
+# (copying only __init__.py causes site-packages stub to shadow /app/isg_agent at runtime)
 COPY pyproject.toml ./
-COPY isg_agent/__init__.py ./isg_agent/__init__.py
+COPY isg_agent/ ./isg_agent/
 
-# Install project dependencies into /install prefix
-# The __init__.py is needed for setuptools to find the package metadata
+# Install project + all dependencies into /install prefix
 RUN pip install --no-cache-dir --prefix=/install .
 
 # ---------------------------------------------------------------------------

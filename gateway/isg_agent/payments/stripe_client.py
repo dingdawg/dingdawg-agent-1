@@ -63,6 +63,13 @@ class StripeClient:
     def __init__(self, api_key: str, webhook_secret: str = "") -> None:
         self.webhook_secret = webhook_secret
         stripe.api_key = api_key
+        # Use HTTPX async client so Stripe calls don't block the asyncio event loop.
+        # Without this, stripe SDK falls back to synchronous `requests`, which
+        # blocks uvicorn workers under load. Required for production FastAPI.
+        try:
+            stripe.default_http_client = stripe.HTTPXClient()
+        except Exception:  # pragma: no cover — older stripe SDK versions
+            pass
 
     async def create_payment_intent(
         self,

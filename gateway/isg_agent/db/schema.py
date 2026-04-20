@@ -583,6 +583,147 @@ CREATE TABLE IF NOT EXISTS zapier_webhook_subscriptions (
 """
 
 # ---------------------------------------------------------------------------
+# Customer management — Sprint 1
+# ---------------------------------------------------------------------------
+
+_CUSTOMERS = """
+CREATE TABLE IF NOT EXISTS customers (
+    id                      TEXT PRIMARY KEY,
+    user_id                 TEXT NOT NULL UNIQUE,
+    email                   TEXT NOT NULL,
+    full_name               TEXT,
+    company                 TEXT,
+    role                    TEXT,
+    stripe_customer_id      TEXT UNIQUE,
+    signup_source           TEXT NOT NULL DEFAULT 'web',
+    subscription_status     TEXT NOT NULL DEFAULT 'free'
+                            CHECK(subscription_status IN ('free','trialing','active','past_due','cancelled','churned','suspended')),
+    subscription_tier       TEXT NOT NULL DEFAULT 'free',
+    stripe_subscription_id  TEXT,
+    current_period_start    TEXT,
+    current_period_end      TEXT,
+    trial_ends_at           TEXT,
+    cancelled_at            TEXT,
+    cancellation_reason     TEXT,
+    churned_at              TEXT,
+    reactivated_at          TEXT,
+    ltv_cents               INTEGER NOT NULL DEFAULT 0,
+    notes                   TEXT,
+    created_at              TEXT NOT NULL,
+    updated_at              TEXT NOT NULL
+);
+"""
+
+_BILLING_EVENTS = """
+CREATE TABLE IF NOT EXISTS billing_events (
+    id                  TEXT PRIMARY KEY,
+    customer_id         TEXT NOT NULL,
+    event_type          TEXT NOT NULL,
+    stripe_event_id     TEXT UNIQUE,
+    amount_cents        INTEGER NOT NULL DEFAULT 0,
+    currency            TEXT NOT NULL DEFAULT 'usd',
+    invoice_id          TEXT,
+    failure_reason      TEXT,
+    retry_count         INTEGER NOT NULL DEFAULT 0,
+    metadata            TEXT NOT NULL DEFAULT '{}',
+    created_at          TEXT NOT NULL,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+);
+"""
+
+_REFUNDS = """
+CREATE TABLE IF NOT EXISTS refunds (
+    id                  TEXT PRIMARY KEY,
+    customer_id         TEXT NOT NULL,
+    stripe_refund_id    TEXT UNIQUE,
+    amount_cents        INTEGER NOT NULL,
+    reason              TEXT,
+    status              TEXT NOT NULL DEFAULT 'pending'
+                        CHECK(status IN ('pending','succeeded','failed','cancelled')),
+    initiated_by        TEXT NOT NULL DEFAULT 'admin',
+    notes               TEXT,
+    created_at          TEXT NOT NULL,
+    resolved_at         TEXT,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+);
+"""
+
+_DUNNING_EVENTS = """
+CREATE TABLE IF NOT EXISTS dunning_events (
+    id                  TEXT PRIMARY KEY,
+    customer_id         TEXT NOT NULL,
+    stage               INTEGER NOT NULL,
+    invoice_id          TEXT,
+    action_taken        TEXT NOT NULL,
+    created_at          TEXT NOT NULL,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+);
+"""
+
+_SUPPORT_TICKETS = """
+CREATE TABLE IF NOT EXISTS support_tickets (
+    id                  TEXT PRIMARY KEY,
+    customer_id         TEXT NOT NULL,
+    subject             TEXT NOT NULL,
+    body                TEXT,
+    status              TEXT NOT NULL DEFAULT 'open'
+                        CHECK(status IN ('open','in_progress','resolved','closed')),
+    priority            TEXT NOT NULL DEFAULT 'normal'
+                        CHECK(priority IN ('low','normal','high','urgent')),
+    category            TEXT DEFAULT 'general',
+    assigned_to         TEXT,
+    resolved_at         TEXT,
+    csat_score          INTEGER CHECK(csat_score BETWEEN 1 AND 5),
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+);
+"""
+
+_EMAIL_LOG = """
+CREATE TABLE IF NOT EXISTS email_log (
+    id                  TEXT PRIMARY KEY,
+    customer_id         TEXT,
+    user_id             TEXT,
+    template_id         TEXT NOT NULL,
+    to_email            TEXT NOT NULL,
+    subject             TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'queued'
+                        CHECK(status IN ('queued','sent','delivered','opened','clicked','bounced','failed')),
+    provider_message_id TEXT,
+    opened_at           TEXT,
+    clicked_at          TEXT,
+    bounced_at          TEXT,
+    metadata            TEXT NOT NULL DEFAULT '{}',
+    created_at          TEXT NOT NULL
+);
+"""
+
+_PASSWORD_RESET_TOKENS = """
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    token_hash          TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL,
+    expires_at          TEXT NOT NULL,
+    used                INTEGER NOT NULL DEFAULT 0,
+    used_at             TEXT,
+    created_at          TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+"""
+
+_MFA_BACKUP_CODES = """
+CREATE TABLE IF NOT EXISTS mfa_backup_codes (
+    id                  TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL,
+    code_hash           TEXT NOT NULL,
+    used                INTEGER NOT NULL DEFAULT 0,
+    used_at             TEXT,
+    created_at          TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+"""
+
+# ---------------------------------------------------------------------------
 # Index definitions
 # ---------------------------------------------------------------------------
 
@@ -744,6 +885,17 @@ _TABLE_STATEMENTS: list[str] = [
     _ZAPIER_WEBHOOK_SUBSCRIPTIONS,
     # Inter-agent comms encryption — per-pair random shared secrets
     _COMM_PAIR_SECRETS,
+    # Customer management — master record, billing, refunds, dunning, support
+    _CUSTOMERS,
+    _BILLING_EVENTS,
+    _REFUNDS,
+    _DUNNING_EVENTS,
+    _SUPPORT_TICKETS,
+    # Transactional email log — every outbound email tracked
+    _EMAIL_LOG,
+    # Auth recovery — password reset tokens + MFA backup codes
+    _PASSWORD_RESET_TOKENS,
+    _MFA_BACKUP_CODES,
 ]
 
 
@@ -889,6 +1041,18 @@ async def create_tables(db: aiosqlite.Connection) -> None:
     await _add_column_if_not_exists(db, "memory_entries", "agent_id", "TEXT")
     await _add_column_if_not_exists(db, "audit_chain", "agent_id", "TEXT")
     await _add_column_if_not_exists(db, "trust_ledger", "agent_id", "TEXT")
+
+    # User profile + security fields (Sprint 1)
+    await _add_column_if_not_exists(db, "users", "full_name", "TEXT")
+    await _add_column_if_not_exists(db, "users", "suspended", "INTEGER NOT NULL DEFAULT 0")
+    await _add_column_if_not_exists(db, "users", "suspended_at", "TEXT")
+    await _add_column_if_not_exists(db, "users", "suspended_by", "TEXT")
+    await _add_column_if_not_exists(db, "users", "suspension_reason", "TEXT")
+    await _add_column_if_not_exists(db, "users", "last_login_at", "TEXT")
+    await _add_column_if_not_exists(db, "users", "last_login_ip", "TEXT")
+    await _add_column_if_not_exists(db, "users", "failed_login_count", "INTEGER NOT NULL DEFAULT 0")
+    await _add_column_if_not_exists(db, "users", "mfa_locked", "INTEGER NOT NULL DEFAULT 0")
+    await _add_column_if_not_exists(db, "users", "mfa_locked_at", "TEXT")
 
     # Create indexes
     for idx_stmt in _INDEXES:

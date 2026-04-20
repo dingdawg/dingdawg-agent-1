@@ -63,6 +63,29 @@ function LoginForm() {
     }
   }, []);
 
+  // Dev-bypass: skip the whole login flow so Tauri webview never navigates
+  // to Google OAuth (which redirects to live app.dingdawg.com and drops the
+  // LayoutEditor overlay). Only fires when NEXT_PUBLIC_DEV_BYPASS_AUTH=1 AND
+  // NODE_ENV=development.
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV === "development" &&
+      process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === "1"
+    ) {
+      const devUser = { id: "dev-local", email: "dev@localhost" };
+      localStorage.setItem("auth_user", JSON.stringify(devUser));
+      localStorage.setItem("access_token", "dev-local-bypass-token");
+      setAccessToken("dev-local-bypass-token");
+      useAuthStore.setState({
+        user: devUser,
+        isAuthenticated: true,
+        isHydrated: true,
+        error: null,
+      });
+      router.replace(returnTo);
+    }
+  }, [returnTo, router]);
+
   const handleMfaSuccess = (accessToken: string, userId: string, mfaEmail: string) => {
     // Use setFromResponse to set token + auth state atomically
     useAuthStore.getState().setFromResponse({

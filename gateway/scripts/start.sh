@@ -12,6 +12,25 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
+# Vault key injection (QuantumVault — Kyber768 + AES-256-GCM)
+# Loads ISG_AGENT_SECRET_KEY + STRIPE_SECRET_KEY from ~/.mila/luxe_vault.enc.
+# Fail-open: if vault is unavailable, falls back to existing env (e.g. Railway vars).
+# ---------------------------------------------------------------------------
+GATEWAY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VAULT_LOADER="$GATEWAY_DIR/vault_loader_gateway.py"
+if [ -f "$VAULT_LOADER" ]; then
+    vault_exports="$(python3 "$VAULT_LOADER" 2>/dev/null)" || true
+    if [ -n "$vault_exports" ]; then
+        eval "$vault_exports"
+        echo "  [vault] Gateway keys loaded from QuantumVault"
+    else
+        echo "  [vault] WARNING: vault_loader returned empty — using existing env"
+    fi
+else
+    echo "  [vault] WARNING: vault_loader_gateway.py not found — using existing env"
+fi
+
+# ---------------------------------------------------------------------------
 # Defaults (overridable via environment)
 # ---------------------------------------------------------------------------
 HOST="${ISG_AGENT_HOST:-0.0.0.0}"

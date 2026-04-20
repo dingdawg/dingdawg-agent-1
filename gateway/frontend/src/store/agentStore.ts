@@ -64,6 +64,36 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   error: null,
 
   fetchAgents: async () => {
+    // Dev-only bypass: synthesize a local mock agent so protected routes
+    // (dashboard, billing, analytics, etc.) render without a live backend
+    // session. Mirrors the auth bypass in middleware.ts + authStore.ts.
+    // NEVER fires in production — NODE_ENV !== "development" short-circuits.
+    if (
+      process.env.NODE_ENV === "development" &&
+      process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === "1"
+    ) {
+      const mockAgent = {
+        id: "dev-agent-local",
+        name: "JC",
+        handle: "yjh",
+        industry: "service",
+        description: "Dev mock agent for UI layout work.",
+        agent_type: "personal",
+        avatar_url: "",
+        primary_color: "#f5b800",
+        greeting: "Hi! I'm JC. How can I help?",
+        goal: "",
+        personality: "",
+        voice_enabled: false,
+        is_public: true,
+        skills: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as unknown as Agent;
+      set({ agents: [mockAgent], currentAgent: mockAgent, isLoading: false });
+      return;
+    }
+
     set({ isLoading: true, error: null });
     try {
       const agents = await listAgents();

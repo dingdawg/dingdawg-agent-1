@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
@@ -185,6 +186,8 @@ function DesktopSidebarContent({
   onLogout,
 }: DesktopSidebarContentProps) {
   const [profileOpen, setProfileOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(true);
 
   const toggleProfile = useCallback(() => {
     if (!isCollapsed) setProfileOpen((p) => !p);
@@ -245,7 +248,22 @@ function DesktopSidebarContent({
         )}
       </div>
 
-      {/* C) Nav Items */}
+      {/* C) Workspace nav — collapsible when expanded */}
+      {!isCollapsed && (
+        <button
+          onClick={() => setNavOpen((p) => !p)}
+          className="flex items-center justify-between w-full px-4 pt-3 pb-1 flex-shrink-0 group/navhdr"
+        >
+          <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-[var(--color-muted)] opacity-60">
+            Workspace
+          </span>
+          <ChevronDown
+            size={10}
+            className={`text-[var(--color-muted)] opacity-50 transition-transform duration-200${navOpen ? "" : " rotate-180"}`}
+          />
+        </button>
+      )}
+      {(isCollapsed || navOpen) && (
       <nav className={`flex-shrink-0 ${isCollapsed ? "px-2" : "px-3"} mt-1`}>
         {NAV_ITEMS.map((item) => {
           const comingSoon = COMING_SOON_CHANNELS.has(item.path);
@@ -300,14 +318,27 @@ function DesktopSidebarContent({
           );
         })}
       </nav>
+      )}
 
       {/* D) Chat History section — hidden when icon-only */}
       {!isCollapsed && (
         <>
-          <div className="flex items-center justify-between px-4 mt-3 mb-1 flex-shrink-0">
-            <span className="text-sm font-semibold text-[var(--foreground)]">
-              Chat history
+          <button
+            onClick={() => setHistoryOpen((p) => !p)}
+            className="flex items-center justify-between w-full px-4 mt-3 mb-0.5 flex-shrink-0"
+          >
+            <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-[var(--color-muted)] opacity-60">
+              Recent Chats
             </span>
+            <ChevronDown
+              size={10}
+              className={`text-[var(--color-muted)] opacity-50 transition-transform duration-200${historyOpen ? "" : " rotate-180"}`}
+            />
+          </button>
+          {historyOpen && (
+          <>
+          <div className="flex items-center justify-between px-4 mb-1 flex-shrink-0">
+            <div />
             <button
               onClick={() => { window.location.href = "/dashboard"; }}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 text-xs text-[var(--color-muted)] hover:bg-white/10 transition-colors"
@@ -363,6 +394,9 @@ function DesktopSidebarContent({
               );
             })}
           </div>
+          </>
+          )}
+          {!historyOpen && <div className="flex-1" />}
         </>
       )}
 
@@ -440,6 +474,8 @@ function MobileSidebarContent({
   onLogout,
 }: MobileSidebarContentProps) {
   const [profileOpen, setProfileOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(true);
   const toggleProfile = useCallback(() => setProfileOpen((p) => !p), []);
   const closeProfile = useCallback(() => setProfileOpen(false), []);
 
@@ -476,7 +512,20 @@ function MobileSidebarContent({
         </button>
       </div>
 
-      {/* Nav Items */}
+      {/* Workspace nav — collapsible */}
+      <button
+        onClick={() => setNavOpen((p) => !p)}
+        className="flex items-center justify-between w-full px-4 pt-3 pb-1 flex-shrink-0"
+      >
+        <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-[var(--color-muted)] opacity-60">
+          Workspace
+        </span>
+        <ChevronDown
+          size={10}
+          className={`text-[var(--color-muted)] opacity-50 transition-transform duration-200${navOpen ? "" : " rotate-180"}`}
+        />
+      </button>
+      {navOpen && (
       <nav className="px-3 mt-1 flex-shrink-0">
         {NAV_ITEMS.map((item) => {
           const comingSoon = COMING_SOON_CHANNELS.has(item.path);
@@ -521,11 +570,25 @@ function MobileSidebarContent({
         })}
       </nav>
 
-      {/* Chat History label */}
-      <div className="flex items-center justify-between px-4 mt-3 mb-1 flex-shrink-0">
-        <span className="text-sm font-semibold text-[var(--foreground)]">
-          Chat history
+      )}
+
+      {/* Recent Chats — collapsible */}
+      <button
+        onClick={() => setHistoryOpen((p) => !p)}
+        className="flex items-center justify-between w-full px-4 mt-3 mb-0.5 flex-shrink-0"
+      >
+        <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-[var(--color-muted)] opacity-60">
+          Recent Chats
         </span>
+        <ChevronDown
+          size={10}
+          className={`text-[var(--color-muted)] opacity-50 transition-transform duration-200${historyOpen ? "" : " rotate-180"}`}
+        />
+      </button>
+      {historyOpen && (
+      <>
+      <div className="flex items-center justify-between px-4 mb-1 flex-shrink-0">
+        <div />
         <button
           onClick={() => { window.location.href = "/dashboard"; onClose(); }}
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 text-xs text-[var(--color-muted)] hover:bg-white/10 transition-colors"
@@ -579,6 +642,10 @@ function MobileSidebarContent({
           );
         })}
       </div>
+
+      </>
+      )}
+      {!historyOpen && <div className="flex-1" />}
 
       {/* Profile */}
       <div

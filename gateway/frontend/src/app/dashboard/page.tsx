@@ -9,7 +9,7 @@
 
 import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { MessageSquare, Calendar, Mail, BarChart2, Search } from "lucide-react";
+import { MessageSquare, Calendar, Mail, BarChart2, Search, Phone, Share2, FileText } from "lucide-react";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useAuthStore } from "@/store/authStore";
 import { useAgentStore } from "@/store/agentStore";
@@ -460,18 +460,186 @@ const QUICK_CHIPS = [
 ] as const;
 
 function QuickActionChips({ onSend }: { onSend: (prompt: string) => void }) {
+  // Shared pill styling — each button stays a horizontal pill on both layouts.
+  const chipClass =
+    "flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-medium border border-[var(--stroke2)] bg-white/[0.04] text-[var(--foreground)] hover:bg-[var(--gold-500)]/10 hover:border-[var(--gold-500)]/30 hover:text-[var(--gold-500)] transition-colors duration-150 whitespace-nowrap min-h-[44px]";
   return (
-    <div className="flex items-center gap-2 px-4 pb-2 pt-1 overflow-x-auto scrollbar-none flex-shrink-0">
-      {QUICK_CHIPS.map((chip) => (
-        <button
-          key={chip.label}
-          type="button"
-          onClick={() => onSend(chip.prompt)}
-          className="flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-medium border border-[var(--stroke2)] bg-white/[0.04] text-[var(--foreground)] hover:bg-[var(--gold-500)]/10 hover:border-[var(--gold-500)]/30 hover:text-[var(--gold-500)] transition-colors duration-150 whitespace-nowrap min-h-[44px]"
-        >
-          {chip.label}
-        </button>
-      ))}
+    <>
+      {/* Desktop — fixed right-side vertical stack. Keeps chat column clean
+          and fills the otherwise-empty right rail. Stays horizontal pill-style
+          per button, just arranged top-to-bottom. */}
+      <div className="hidden md:flex fixed right-6 top-1/2 -translate-y-1/2 flex-col items-end gap-2 z-20">
+        {QUICK_CHIPS.map((chip) => (
+          <button
+            key={chip.label}
+            type="button"
+            onClick={() => onSend(chip.prompt)}
+            className={chipClass}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
+      {/* Mobile — original horizontal row at the bottom, unchanged. */}
+      <div className="flex md:hidden items-center gap-2 px-4 pb-2 pt-1 overflow-x-auto scrollbar-none flex-shrink-0">
+        {QUICK_CHIPS.map((chip) => (
+          <button
+            key={chip.label}
+            type="button"
+            onClick={() => onSend(chip.prompt)}
+            className={chipClass}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ─── Agent Capability Strip ────────────────────────────────────────────────────
+
+interface CapabilityTile {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  prompt?: string;
+  soon?: boolean;
+}
+
+const CAPABILITY_TILES: CapabilityTile[] = [
+  {
+    icon: <Calendar className="h-5 w-5" />,
+    label: "Schedule",
+    description: "Book & manage appointments",
+    prompt: "Book a demo appointment for a new client this week",
+  },
+  {
+    icon: <Mail className="h-5 w-5" />,
+    label: "Email",
+    description: "Draft, send & track emails",
+    prompt: "Draft a professional follow-up email to a lead",
+  },
+  {
+    icon: <Phone className="h-5 w-5" />,
+    label: "SMS",
+    description: "Text message campaigns",
+    soon: true,
+  },
+  {
+    icon: <Share2 className="h-5 w-5" />,
+    label: "Social",
+    description: "Instagram, LinkedIn, X posts",
+    soon: true,
+  },
+  {
+    icon: <FileText className="h-5 w-5" />,
+    label: "Files",
+    description: "Send docs, PDFs & reports",
+    soon: true,
+  },
+  {
+    icon: <BarChart2 className="h-5 w-5" />,
+    label: "Analytics",
+    description: "Revenue & performance insights",
+    prompt: "Create a sales report summarizing this month's performance",
+  },
+];
+
+function AgentCapabilityStrip({ onSend }: { onSend: (prompt: string) => void }) {
+  return (
+    <div className="px-4 mb-4 max-w-2xl mx-auto w-full">
+      <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-[var(--color-muted)] opacity-60 text-center mb-3">
+        What your agent can do
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        {CAPABILITY_TILES.map((tile) => (
+          <button
+            key={tile.label}
+            type="button"
+            disabled={tile.soon}
+            onClick={() => !tile.soon && tile.prompt && onSend(tile.prompt)}
+            className={`group flex flex-col gap-1 sm:gap-1.5 rounded-xl border text-left px-2.5 py-2 sm:px-3 sm:py-2.5 min-h-[44px] transition-all duration-150 ${
+              tile.soon
+                ? "border-[var(--stroke2)] bg-white/[0.02] opacity-40 cursor-not-allowed"
+                : "border-[var(--stroke2)] bg-white/[0.03] hover:bg-white/[0.07] hover:border-[var(--gold-500)]/30 cursor-pointer"
+            }`}
+          >
+            <span className={`flex items-center gap-1.5 sm:gap-2 ${tile.soon ? "text-[var(--color-muted)]" : "text-[var(--gold-500)]"}`}>
+              <span className="flex-shrink-0 [&>svg]:h-4 [&>svg]:w-4 sm:[&>svg]:h-5 sm:[&>svg]:w-5">{tile.icon}</span>
+              <span className="text-[11px] sm:text-[12px] font-semibold text-[var(--foreground)] leading-none">
+                {tile.label}
+                {tile.soon && (
+                  <span className="ml-1 text-[9px] uppercase tracking-wide font-semibold text-[var(--color-muted)] opacity-80">
+                    Soon
+                  </span>
+                )}
+              </span>
+            </span>
+            <span className="hidden sm:block text-[11px] text-[var(--color-muted)] leading-snug">
+              {tile.description}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Channel Tabs ─────────────────────────────────────────────────────────────
+
+interface ChannelTabDef {
+  id: string;
+  label: string;
+  soon?: boolean;
+}
+
+const CHANNEL_TABS: ChannelTabDef[] = [
+  { id: "chat", label: "Chat" },
+  { id: "tasks", label: "Tasks" },
+  { id: "files", label: "Files", soon: true },
+  { id: "notes", label: "Notes", soon: true },
+];
+
+type ChannelId = "chat" | "tasks" | "files" | "notes";
+
+function ChannelTabs({
+  activeTab,
+  onTabChange,
+}: {
+  activeTab: ChannelId;
+  onTabChange: (id: ChannelId) => void;
+}) {
+  return (
+    <div className="flex items-center gap-0 px-2 border-b border-[var(--stroke)]/40 flex-shrink-0 overflow-x-auto scrollbar-none">
+      {CHANNEL_TABS.map((tab) => {
+        const isActive = tab.id === activeTab;
+        const isSoon = tab.soon === true;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => !isSoon && onTabChange(tab.id as ChannelId)}
+            disabled={isSoon}
+            className={`relative flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-medium transition-colors duration-150 whitespace-nowrap flex-shrink-0 ${
+              isActive
+                ? "text-[var(--foreground)]"
+                : isSoon
+                ? "text-[var(--color-muted)] opacity-40 cursor-not-allowed"
+                : "text-[var(--color-muted)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {tab.label}
+            {isSoon && (
+              <span className="text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded bg-white/[0.07] text-[var(--color-muted)]">
+                Soon
+              </span>
+            )}
+            {isActive && (
+              <span className="absolute bottom-0 inset-x-2 h-[2px] bg-[var(--gold-500)] rounded-t-full" />
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -524,6 +692,8 @@ function ChatDashboard() {
     activeSkills: 16,
     integrations: [],
   });
+
+  const [activeChannel, setActiveChannel] = useState<ChannelId>("chat");
 
   // Ref to the chat textarea for focus-from-GettingStarted
   const chatInputAreaRef = useRef<HTMLDivElement>(null);
@@ -1163,7 +1333,8 @@ function ChatDashboard() {
     <div className="h-full flex overflow-hidden">
       {/* ── Chat-first fullscreen area ────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Agent command bar — stats, status, notifications, settings */}
+        {/* Agent command bar — desktop only; mobile uses AppShell header */}
+        <div className="hidden md:block">
         <DashboardHeader
           agentName={currentAgent.name}
           handle={currentAgent.handle}
@@ -1185,6 +1356,11 @@ function ChatDashboard() {
           hasIntegrations={dashStats.integrations.some((i) => i.connected)}
         />
 
+        </div>{/* end desktop-only header block */}
+
+        {/* ── Channel tabs ──────────────────────────────────────── */}
+        <ChannelTabs activeTab={activeChannel} onTabChange={setActiveChannel} />
+
         {/* ── Welcome state vs Active chat ──────────────────────── */}
         {(() => {
           // Welcome state: only system-generated messages, no user input yet
@@ -1197,12 +1373,12 @@ function ChatDashboard() {
             // Desktop: everything centered vertically
             return (
               <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                {/* Spacer — pushes content to center on desktop, top on mobile */}
-                <div className="flex-1" />
+                {/* Spacer — desktop only, centers content vertically */}
+                <div className="hidden md:block flex-1" />
 
                 {/* Brand / Agent identity */}
-                <div className="flex flex-col items-center gap-3 px-4 mb-6 lg:mb-8">
-                  <div className="h-14 w-14 lg:h-16 lg:w-16 rounded-2xl bg-[var(--gold-500)]/10 border border-[var(--gold-500)]/20 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-2 px-4 mb-3 lg:mb-8">
+                  <div className="h-10 w-10 sm:h-14 sm:w-14 lg:h-16 lg:w-16 rounded-2xl bg-[var(--gold-500)]/10 border border-[var(--gold-500)]/20 flex items-center justify-center">
                     <span className="text-xl lg:text-2xl font-heading font-bold text-[var(--gold-500)]">
                       {currentAgent.name.charAt(0).toUpperCase()}
                     </span>
@@ -1221,67 +1397,24 @@ function ChatDashboard() {
                   </div>
                 </div>
 
-                {/* Spacer — pushes input down on desktop */}
-                <div className="flex-1" />
+                {/* Spacer — pushes input down on desktop only, collapses on mobile */}
+                <div className="hidden md:block flex-1" />
 
-                {/* Try This First — guided prompt cards for new users */}
-                <div className="px-4 mb-4 max-w-2xl mx-auto w-full">
-                  <p className="text-xs text-[var(--color-muted)] text-center mb-3 font-medium tracking-wide uppercase opacity-70">
-                    Try asking your agent to&hellip;
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-2">
-                    {[
-                      {
-                        icon: <Calendar className="h-4 w-4 text-[var(--gold-500)]" aria-hidden="true" />,
-                        title: "Book a demo appointment",
-                        subtitle: "Schedule and confirm with a client",
-                        prompt: "Book a demo appointment for a new client this week",
-                      },
-                      {
-                        icon: <Mail className="h-4 w-4 text-[var(--gold-500)]" aria-hidden="true" />,
-                        title: "Draft a follow-up email",
-                        subtitle: "Write and send a professional follow-up",
-                        prompt: "Draft a follow-up email to a lead I met yesterday",
-                      },
-                      {
-                        icon: <BarChart2 className="h-4 w-4 text-[var(--gold-500)]" aria-hidden="true" />,
-                        title: "Create a sales report",
-                        subtitle: "Summarize revenue and top opportunities",
-                        prompt: "Create a sales report summarizing this month's performance",
-                      },
-                      {
-                        icon: <Search className="h-4 w-4 text-[var(--gold-500)]" aria-hidden="true" />,
-                        title: "Research a competitor",
-                        subtitle: "Find key insights about a rival company",
-                        prompt: "Research my top competitor and summarize their strengths",
-                      },
-                    ].map((card) => (
-                      <button
-                        key={card.title}
-                        type="button"
-                        onClick={() => handleSend(card.prompt)}
-                        className="group flex flex-col gap-1.5 rounded-xl border border-[var(--stroke2)] bg-white/3 hover:bg-white/6 hover:border-[var(--gold-500)]/30 transition-all duration-150 text-left px-3.5 py-3 min-h-[44px]"
-                      >
-                        <span className="flex items-center gap-2">
-                          {card.icon}
-                          <span className="text-sm font-medium text-[var(--foreground)] leading-snug line-clamp-1">
-                            {card.title}
-                          </span>
-                        </span>
-                        <span className="text-[11px] text-[var(--color-muted)] leading-snug pl-6 line-clamp-1">
-                          {card.subtitle}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                {/* Agent capability tiles — what this agent can do */}
+                <AgentCapabilityStrip onSend={handleSend} />
 
-                {/* Quick action chips */}
+                {/* Quick action chips — flex flow, sit above fixed bar, never clipped */}
                 <QuickActionChips onSend={handleSend} />
 
-                {/* Input bar — bottom anchored, full width like Gemini/Grok */}
-                <div className="bg-[var(--ink-950)] flex-shrink-0" ref={chatInputAreaRef}>
-                  <div className="flex items-end max-w-2xl mx-auto w-full px-4">
+                {/* Spacer — reserves height for fixed bar (input + disclaimer only) on mobile */}
+                <div className="h-[68px] flex-shrink-0 md:hidden" />
+
+                {/* Input bar — fixed above mobile bottom nav / inline on desktop */}
+                <div
+                  className="fixed bottom-[56px] inset-x-0 z-20 bg-[var(--ink-950)] border-t border-[var(--stroke)]/20 md:relative md:bottom-auto md:inset-x-auto md:z-auto md:border-t-0"
+                  ref={chatInputAreaRef}
+                >
+                  <div className="flex items-center max-w-2xl mx-auto w-full px-4">
                     <div className="flex-1 min-w-0 [&>div]:border-t-0 [&>div]:bg-transparent [&>div]:backdrop-blur-none">
                       <ChatInput
                         onSend={handleSend}
@@ -1289,7 +1422,7 @@ function ChatDashboard() {
                         placeholder={`Message ${currentAgent.name}...`}
                       />
                     </div>
-                    <div className="flex-shrink-0 flex items-end pb-2 pl-1">
+                    <div className="flex-shrink-0 flex items-center pl-1">
                       <VoiceButton
                         onTranscript={handleSend}
                         disabled={isStreaming}
@@ -1297,7 +1430,7 @@ function ChatDashboard() {
                       />
                     </div>
                   </div>
-                  <p className="text-center text-[11px] text-[var(--color-muted)] opacity-60 pb-1.5 px-4">
+                  <p className="hidden md:block text-center text-[11px] text-[var(--color-muted)] opacity-60 pb-1.5 px-4">
                     Responses may be inaccurate. Verify important information.
                   </p>
                 </div>
@@ -1321,12 +1454,18 @@ function ChatDashboard() {
                 onIntegrationConnect={handleIntegrationConnect}
               />
 
-              {/* Quick action chips */}
+              {/* Quick action chips — flex flow, sit above fixed bar, never clipped */}
               <QuickActionChips onSend={handleSend} />
 
-              {/* Input bar — bottom-anchored */}
-              <div className="bg-[var(--ink-950)] flex-shrink-0" ref={chatInputAreaRef}>
-                <div className="flex items-end max-w-3xl mx-auto w-full px-4">
+              {/* Spacer — reserves height for fixed bar (input + disclaimer only) on mobile */}
+              <div className="h-[84px] flex-shrink-0 md:hidden" />
+
+              {/* Input bar — fixed above mobile bottom nav / inline on desktop */}
+              <div
+                className="fixed bottom-[56px] inset-x-0 z-20 bg-[var(--ink-950)] border-t border-[var(--stroke)]/20 md:relative md:bottom-auto md:inset-x-auto md:z-auto md:border-t-0"
+                ref={chatInputAreaRef}
+              >
+                <div className="flex items-center max-w-3xl mx-auto w-full px-4">
                   <div className="flex-1 min-w-0 [&>div]:border-t-0 [&>div]:bg-transparent [&>div]:backdrop-blur-none">
                     <ChatInput
                       onSend={handleSend}
@@ -1334,7 +1473,7 @@ function ChatDashboard() {
                       placeholder={`Message ${currentAgent.name}...`}
                     />
                   </div>
-                  <div className="flex-shrink-0 flex items-end pb-2 pl-1">
+                  <div className="flex-shrink-0 flex items-center pl-1">
                     <VoiceButton
                       onTranscript={handleSend}
                       disabled={isStreaming}

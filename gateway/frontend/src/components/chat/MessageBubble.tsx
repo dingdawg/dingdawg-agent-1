@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * Chat message bubble with governance badge, feedback, and error/retry state.
+ * Chat message bubble with governance badge, action buttons, feedback, and error/retry state.
  */
 
+import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/utils";
 import type { ChatMessage } from "@/store/chatStore";
-import { Shield, ShieldAlert, ShieldOff, AlertCircle, RotateCcw } from "lucide-react";
+import { Shield, ShieldAlert, ShieldOff, AlertCircle, RotateCcw, Copy, Check } from "lucide-react";
 import MarkdownRenderer from "./MarkdownRenderer";
 import { MessageFeedback } from "./MessageFeedback";
 
@@ -69,6 +70,19 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
   const isStreaming = message.status === "streaming";
   const isAssistant = message.role === "assistant";
 
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    if (!message.content) return;
+    navigator.clipboard
+      .writeText(message.content)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1800);
+      })
+      .catch(() => {});
+  }, [message.content]);
+
   if (isSystem) {
     return (
       <div className="flex justify-center my-2">
@@ -98,7 +112,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
             {message.content}
           </p>
         ) : isError ? (
-          /* ── Error state with inline retry ── */
+          /* -- Error state with inline retry -- */
           <div className="flex flex-col gap-2" role="alert" aria-live="assertive">
             <div className="flex items-start gap-2 text-red-400">
               <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
@@ -130,14 +144,14 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
         )}
       </div>
 
-      {/* Metadata row + feedback */}
+      {/* Metadata row + action buttons + feedback */}
       <div
         className={cn(
-          "flex items-center gap-2 px-1 text-xs text-[var(--color-muted)]",
+          "flex items-center gap-1.5 px-1 text-xs text-[var(--color-muted)]",
           isUser ? "flex-row-reverse" : "flex-row"
         )}
       >
-        <span>{formatRelativeTime(new Date(message.timestamp))}</span>
+        <span className="opacity-70">{formatRelativeTime(new Date(message.timestamp))}</span>
 
         {message.governance_decision && (
           <GovernanceBadge
@@ -147,11 +161,39 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
         )}
 
         {message.model && (
-          <span className="opacity-60">{message.model}</span>
+          <span className="opacity-50 text-[11px]">{message.model}</span>
         )}
 
         {message.tokens_used != null && message.tokens_used > 0 && (
-          <span className="opacity-60">{message.tokens_used} tokens</span>
+          <span className="opacity-40 text-[11px]">{message.tokens_used}t</span>
+        )}
+
+        {/* Action buttons: copy + regenerate — hover-reveal on assistant messages */}
+        {isAssistant && !isStreaming && !isError && (
+          <div className="flex items-center gap-0.5 ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <button
+              onClick={handleCopy}
+              className="flex items-center justify-center h-6 w-6 rounded-md text-[var(--color-muted)] hover:text-[var(--foreground)] hover:bg-white/[0.08] transition-all duration-100"
+              title="Copy"
+              aria-label="Copy message"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-green-400" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </button>
+            {onRetry && message.status === "final" && (
+              <button
+                onClick={() => onRetry(message.id)}
+                className="flex items-center justify-center h-6 w-6 rounded-md text-[var(--color-muted)] hover:text-[var(--foreground)] hover:bg-white/[0.08] transition-all duration-100"
+                title="Regenerate"
+                aria-label="Regenerate response"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         )}
 
         {/* Feedback buttons — only on finalized assistant messages */}

@@ -1378,28 +1378,115 @@ async def forgot_password(
     body: ForgotPasswordRequest,
     db_path: str = Depends(_get_db_path),
 ) -> dict:
-    """Stub for password reset — validates the email exists, then returns 200.
+    """Send a password reset link. Always returns 200 to prevent email enumeration."""
+    import hashlib
+    import secrets
+    from datetime import timedelta
 
-    Always returns 200 regardless of whether the email is registered to
-    prevent email enumeration attacks.  In production this would dispatch
-    a reset link via SendGrid/Resend.
-    """
     await _ensure_users_table(db_path, db_path == ":memory:")
+    generic = {"message": "If an account exists with that email, a password reset link will be sent."}
+    now = datetime.now(timezone.utc)
+
     async with aiosqlite.connect(db_path) as db:
-        cursor = await db.execute(
-            "SELECT id FROM users WHERE email = ?",
-            (body.email,),
-        )
-        row = await cursor.fetchone()
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, email, full_name FROM users WHERE email = ?", (body.email,)
+        ) as cursor:
+            user = await cursor.fetchone()
 
-    if row is not None:
-        logger.info("Password reset requested for existing user: %s", body.email)
-    else:
+    if not user:
         logger.info("Password reset requested for unknown email: %s", body.email)
+        return generic
 
-    return {
-        "message": (
-            "If an account exists with that email, "
-            "a password reset link will be sent."
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires_at = (now + timedelta(hours=1)).isoformat()
+
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(
+            """CREATE TABLE IF NOT EXISTS password_reset_tokens (
+               token_hash TEXT PRIMARY KEY,
+               user_id    TEXT NOT NULL,
+               expires_at TEXT NOT NULL,
+               used       INTEGER NOT NULL DEFAULT 0,
+               used_at    TEXT,
+               created_at TEXT NOT NULL
+            )"""
         )
-    }
+        await db.execute(
+            """INSERT INTO password_reset_tokens
+               (token_hash, user_id, expires_at, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (token_hash, user["id"], expires_at, now.isoformat()),
+        )
+        await db.commit()
+
+    reset_url = f"https://app.dingdawg.com/reset-password?token={raw_token}"
+    try:
+        from isg_agent.comms.email_service import render_password_reset, send_email
+        name = user["full_name"] or user["email"]
+        subject, html = render_password_reset(name, reset_url)
+        await send_email(
+            template_id="password_reset",
+            to_email=user["email"],
+            subject=subject,
+            html_body=html,
+            db_path=db_path,
+            user_id=user["id"],
+        )
+    except Exception as exc:
+        logger.warning("Password reset email failed for %s: %s", body.email, exc)
+
+    logger.info("Password reset dispatched for user: %s", user["id"])
+    return generic
+
+
+class PasswordResetRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/reset-password", summary="Complete password reset", status_code=200)
+async def reset_password(
+    body: PasswordResetRequest,
+    db_path: str = Depends(_get_db_path),
+) -> dict:
+    """Validate a reset token and update the user's password."""
+    import hashlib
+
+    if len(body.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Password must be at least 8 characters.",
+        )
+
+    now = datetime.now(timezone.utc)
+    token_hash = hashlib.sha256(body.token.encode()).hexdigest()
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM password_reset_tokens WHERE token_hash = ?", (token_hash,)
+        ) as cursor:
+            record = await cursor.fetchone()
+
+    if not record:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token.")
+    if record["used"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset token already used.")
+    if datetime.fromisoformat(record["expires_at"]).replace(tzinfo=timezone.utc) < now:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset token has expired.")
+
+    password_hash, salt = _hash_password(body.new_password)
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(
+            "UPDATE users SET password_hash = ?, salt = ? WHERE id = ?",
+            (password_hash, salt, record["user_id"]),
+        )
+        await db.execute(
+            "UPDATE password_reset_tokens SET used = 1, used_at = ? WHERE token_hash = ?",
+            (now.isoformat(), token_hash),
+        )
+        await db.commit()
+
+    return {"message": "Password updated successfully."}

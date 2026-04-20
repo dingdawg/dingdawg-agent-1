@@ -206,22 +206,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     # -- Skill execution pipeline ---------------------------------------------
-    from isg_agent.skills.executor import SkillExecutor
-    from isg_agent.skills.reputation import SkillReputation
-    from isg_agent.skills.quarantine import QuarantineManager
+    # Skills module is closed-source IP — fail-open if not present in deployment
+    try:
+        from isg_agent.skills.executor import SkillExecutor
+        from isg_agent.skills.reputation import SkillReputation
+        from isg_agent.skills.quarantine import QuarantineManager
 
-    skill_executor = SkillExecutor(
-        workspace_root=str(settings.db_path).rsplit("/", 1)[0] if "/" in str(settings.db_path) else ".",
-        audit_chain=audit_chain,
-    )
-    skill_reputation = SkillReputation()
-    quarantine_manager = QuarantineManager()
+        skill_executor = SkillExecutor(
+            workspace_root=str(settings.db_path).rsplit("/", 1)[0] if "/" in str(settings.db_path) else ".",
+            audit_chain=audit_chain,
+        )
+        skill_reputation = SkillReputation()
+        quarantine_manager = QuarantineManager()
+        logger.info("Skill execution pipeline initialised")
+    except ModuleNotFoundError:
+        skill_executor = None
+        skill_reputation = None
+        quarantine_manager = None
+        logger.warning("Skill execution pipeline unavailable — running in degraded mode")
 
     app.state.skill_executor = skill_executor
     app.state.skill_reputation = skill_reputation
     app.state.quarantine_manager = quarantine_manager
     app.state.governance_gate = governance_gate
-    logger.info("Skill execution pipeline initialised")
 
     # -- Explain engine ------------------------------------------------------
     from isg_agent.core.explain import ExplainEngine
@@ -333,16 +340,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 "FlywheelEmitter.ensure_future failed (non-blocking): %s", _fw_exc
             )
 
-    skill_executor.add_post_execute_hook(_usage_hook)
-    skill_executor.add_post_execute_hook(capability_bridge.post_execute_hook)
+    if skill_executor is not None:
+        skill_executor.add_post_execute_hook(_usage_hook)
+        skill_executor.add_post_execute_hook(capability_bridge.post_execute_hook)
 
-    # Wire trust ledger into skill execution hook chain — records per-skill
-    # and per-agent trust scores on every execution for autonomous gating.
-    from isg_agent.hooks.trust_ledger_hook import make_trust_ledger_hook
+        # Wire trust ledger into skill execution hook chain — records per-skill
+        # and per-agent trust scores on every execution for autonomous gating.
+        from isg_agent.hooks.trust_ledger_hook import make_trust_ledger_hook
 
-    _trust_hook = make_trust_ledger_hook(trust_ledger)
-    skill_executor.add_post_execute_hook(_trust_hook)
-    logger.info("Trust ledger wired into skill executor hook chain")
+        _trust_hook = make_trust_ledger_hook(trust_ledger)
+        skill_executor.add_post_execute_hook(_trust_hook)
+        logger.info("Trust ledger wired into skill executor hook chain")
+    else:
+        logger.warning("Skill executor unavailable — hook chain skipped")
 
     logger.info("Usage metering: $%.2f/action, %d free/month", 1.00, 50)
 
@@ -539,12 +549,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # can be wired to the Google Calendar connector at startup.
     # Gaming skills (match_tracker, tournament, game_session, loot_tracker)
     # are registered in the same call via the unified _SKILL_REGISTRY.
-    from isg_agent.skills.builtin import register_builtin_skills
+    if skill_executor is not None:
+        try:
+            from isg_agent.skills.builtin import register_builtin_skills
 
-    registered_skills = await register_builtin_skills(
-        skill_executor, db_path, google_calendar=google_calendar
-    )
-    logger.info("Built-in skills registered: %s", registered_skills)
+            registered_skills = await register_builtin_skills(
+                skill_executor, db_path, google_calendar=google_calendar
+            )
+            logger.info("Built-in skills registered: %s", registered_skills)
+        except ModuleNotFoundError:
+            logger.warning("register_builtin_skills unavailable — skill registration skipped")
+    else:
+        logger.warning("Skill executor is None — skipping built-in skill registration")
 
     # -- Voice integration (Vapi) -----------------------------------------------
     from isg_agent.integrations.voice_vapi import VapiConnector
@@ -795,6 +811,7 @@ def create_app() -> FastAPI:
         "/auth/oauth/refresh",
         "/auth/oauth/authorize",
         "/auth/oauth/login-and-authorize",
+        "/auth/refresh",
     })
     app.add_middleware(
         ConstitutionMiddleware,
@@ -849,6 +866,9 @@ def create_app() -> FastAPI:
     from isg_agent.api.routes.payments import router as payments_router
     from isg_agent.api.routes.audit import router as audit_router
     from isg_agent.api.routes.trust import router as trust_router
+    from isg_agent.api.routes.trust_stream import router as trust_stream_router
+    from isg_agent.api.routes.compliance import router as compliance_router
+    from isg_agent.api.routes.attest import router as attest_router
     from isg_agent.api.routes.explain import router as explain_router
     from isg_agent.api.routes.config import router as config_router
     from isg_agent.api.routes.skills import router as skills_router
@@ -885,7 +905,10 @@ def create_app() -> FastAPI:
     from isg_agent.api.routes.files import router as files_router
     from isg_agent.api.routes.notifications import router as notifications_router
     from isg_agent.api.routes.health import router as health_router
+    from isg_agent.api.routes.developers import router as developers_router
+    from isg_agent.api.routes.console_governance import router as console_governance_router
 
+    app.include_router(console_governance_router)
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(auth_social_router)
@@ -896,6 +919,9 @@ def create_app() -> FastAPI:
     app.include_router(payments_router)
     app.include_router(audit_router)
     app.include_router(trust_router)
+    app.include_router(trust_stream_router)
+    app.include_router(compliance_router)
+    app.include_router(attest_router)
     app.include_router(explain_router)
     app.include_router(config_router)
     app.include_router(skills_router)
@@ -931,6 +957,7 @@ def create_app() -> FastAPI:
     app.include_router(oauth_server_router)
     app.include_router(files_router)
     app.include_router(notifications_router)
+    app.include_router(developers_router)
 
     # -- Mount MCP ASGI app (fail-open) ---------------------------------------
     try:
