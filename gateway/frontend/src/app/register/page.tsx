@@ -12,8 +12,8 @@
  * Real users see NO friction — zero visible CAPTCHAs, zero extra clicks.
  */
 
-import { useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useCallback, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Zap, ChevronLeft } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
@@ -23,8 +23,9 @@ import { Card } from "@/components/ui/card";
 import { HoneypotField } from "@/components/security/HoneypotField";
 import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 import { isDisposableEmail, getPageLoadTimestamp } from "@/lib/security";
+import { createCheckoutSession } from "@/services/api/paymentService";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,6 +40,15 @@ export default function RegisterPage() {
 
   const { register, isLoading, error, clearError } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const planParam = searchParams.get("plan");
+  const billingParam = searchParams.get("billing") || "monthly";
+  const planMap: Record<string, string> = {
+    compliance_starter: "pro",
+    compliance_standard: "team",
+    compliance_pro: "enterprise",
+  };
+  const mappedPlan = planParam ? (planMap[planParam] ?? planParam) : null;
 
   const handleTurnstileSuccess = useCallback((token: string) => {
     setTurnstileToken(token);
@@ -117,6 +127,21 @@ export default function RegisterPage() {
         terms_accepted: true,
         terms_accepted_at: new Date().toISOString(),
       });
+
+      // If user came from pricing page with a plan, send them straight to Stripe checkout
+      if (mappedPlan) {
+        try {
+          const { checkout_url } = await createCheckoutSession("default", mappedPlan);
+          if (checkout_url) {
+            window.location.href = checkout_url;
+            return;
+          }
+        } catch {
+          // fallback to billing page if checkout fails
+        }
+        router.push(`/billing?plan=${mappedPlan}`);
+        return;
+      }
       router.push("/onboarding");
     } catch {
       // Error is in store
@@ -392,5 +417,14 @@ export default function RegisterPage() {
         </p>
       </Card>
     </div>
+  );
+
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#05101f] flex items-center justify-center"><p className="text-[#a1a1aa] text-sm">Loading...</p></div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }
