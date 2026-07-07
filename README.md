@@ -1,63 +1,52 @@
-# ISG Agent 1
+# DingDawg Agent 1
 
-[![CI](https://github.com/InnovativeSystemsGlobal/isg-agent-1/actions/workflows/ci.yml/badge.svg)](https://github.com/InnovativeSystemsGlobal/isg-agent-1/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-**Governance from Day 1.** A security-hardened, governance-first autonomous AI agent platform.
+**Governance receipts for AI agents.**
 
-ISG Agent 1 proves that autonomous AI agents can be both powerful and safe. While other agent platforms bolt on security as an afterthought, ISG Agent 1 bakes governance into every layer from the start.
+Every action a governed agent takes generates a cryptographically-signed receipt: what it decided, why, which model, which version, at what time. Built toward EU AI Act Art. 12, Colorado AI Act (SB 24-205), and NIST AI RMF requirements.
 
-## 7 Innovations No Other Agent Has
+The receipt is what turns a policy document into evidence.
 
-| Innovation | What It Does |
-|-----------|-------------|
-| **Agent Constitution** | Machine-enforced behavioral contract -- not guidelines, a verified contract |
-| **Adversarial Self-Testing** | The agent red-teams itself in production on a schedule |
-| **Time-Locked Actions** | Mandatory cooling period before dangerous operations (30-60s) |
-| **Trust Ledger** | Transparent, cryptographic reputation tracking for every action |
-| **Explain Mode** | Cryptographic proof of why every decision was made |
-| **Skill Reputation** | Community-verified trust scores for agent skills |
-| **Separation of Powers** | Critical actions require approval from independent agent or human |
+## What's live today
 
-## Security Comparison
+| Capability | Endpoint |
+|---|---|
+| Developer signup — issues a scoped API key | `POST /v1/developers/signup` |
+| Governed execution — routes agent calls through metering + audit | `POST /v1/govern/execute` |
+| Compliance classification | `POST /api/v1/compliance/classify` |
+| Regulation lookup | `GET /api/v1/compliance/regulations` |
+| Agent trust score + live stream | `GET /api/v1/agents/{id}/trust`, `WS .../trust/stream` |
+| Billing (Stripe) | `POST /api/v1/payments/create-checkout-session` |
 
-ISG Agent 1 was built as a direct response to the security failures in existing agent platforms. Where others have exposed instances, malicious skills, and no audit trails, ISG Agent 1 has localhost-only defaults, skill quarantine, and hash-chained audit logs.
+Backed by 10 governed-agent npm packages (compliance, legal, healthcare, finance, devops, marketing, sales, support, code-review, planning).
 
 ## Quickstart
 
 ```bash
-git clone https://github.com/InnovativeSystemsGlobal/isg-agent-1.git
-cd isg-agent-1
-
-cd gateway
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-cp ../.env.example ../.env
-cp ../config/agent.example.yaml ../config/agent.yaml
-
-python -m isg_agent
+curl -X POST https://api.dingdawg.com/v1/developers/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","name":"Your Name","role":"consumer"}'
+# -> {"api_key": "dd_...", ...}  store it — shown once
 ```
 
-The gateway starts on `http://localhost:8900` by default (localhost-only).
+```bash
+export DINGDAWG_API_KEY=dd_your_key
+npx dingdawg-compliance quick-check
+```
 
 ## Architecture
 
 ```
-User (Discord/Telegram/Web)
-  -> Bridge (TypeScript, normalizes messages)
-  -> Gateway (Python/FastAPI, governance engine)
-     -> Constitution check
-     -> Governance gate (PROCEED/REVIEW/HALT)
-     -> Audit trail (SHA-256 hash chain)
-     -> Brain (LLM + convergence guarantees)
-     -> Skills (sandboxed, quarantined, reputation-scored)
-  -> Response (governed, explained, audited)
+Client (npm package / your agent) --auth: DINGDAWG_API_KEY-->
+  api.dingdawg.com (FastAPI, Railway)
+    -> Tier isolation + rate limiting
+    -> Governance gate (score, log, decide)
+    -> Audit trail (signed receipt)
+    -> Stripe metering / billing
+  -> Response (governed, scored, receipted)
 ```
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full architecture overview.
 
 ## Documentation
 
