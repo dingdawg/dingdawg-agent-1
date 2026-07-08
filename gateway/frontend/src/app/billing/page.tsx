@@ -15,7 +15,7 @@
  *   Enterprise — unlimited      — $199.99/mo
  */
 
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CreditCard,
@@ -367,7 +367,7 @@ export default function BillingPage() {
 function BillingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { currentAgent, agents, isLoading: agentsLoading, fetchAgents } =
+  const { currentAgent, agents, isLoading: agentsLoading, fetchAgents, selectAgent } =
     useAgentStore();
 
   const [usage, setUsage] = useState<SkillUsageSummary | null>(null);
@@ -461,6 +461,58 @@ function BillingContent() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  // Start Stripe hosted checkout — shared by PlanCard upgrades and the
+  // onboarding ?upgrade= handoff.
+  const startCheckout = useCallback(
+    async (agentId: string, planId: string) => {
+      setSubscribingTo(planId);
+      try {
+        const { checkout_url } = await createCheckoutSession(agentId, planId);
+        // Navigate to Stripe — page leaves so no need to reset subscribingTo
+        window.location.href = checkout_url;
+      } catch (err: unknown) {
+        const detail =
+          (err as { response?: { data?: { detail?: string } } })?.response
+            ?.data?.detail ?? "Failed to start checkout. Please try again.";
+        setToast({ type: "error", message: detail });
+        setSubscribingTo(null);
+      }
+    },
+    []
+  );
+
+  // Onboarding Step 6 hands off here as /billing?upgrade=<tier>&agent=<handle>.
+  // Auto-open Stripe checkout for that tier once agents are loaded.
+  const autoUpgradeFired = useRef(false);
+  useEffect(() => {
+    const upgrade = searchParams.get("upgrade");
+    if (!upgrade || autoUpgradeFired.current) return;
+    const isPaidTier = PRICING_TIERS.some(
+      (t) => t.id === upgrade && t.price > 0
+    );
+    if (!isPaidTier) {
+      router.replace("/billing", { scroll: false });
+      return;
+    }
+    if (agentsLoading || agents.length === 0) return;
+    const handle = searchParams.get("agent");
+    const target =
+      agents.find((a) => a.handle === handle) ?? currentAgent ?? agents[0];
+    if (!target) return;
+    autoUpgradeFired.current = true;
+    if (currentAgent?.id !== target.id) selectAgent(target.id);
+    router.replace("/billing", { scroll: false });
+    startCheckout(target.id, upgrade);
+  }, [
+    searchParams,
+    agents,
+    agentsLoading,
+    currentAgent,
+    router,
+    selectAgent,
+    startCheckout,
+  ]);
+
   const handleUpgrade = async (planId: string) => {
     if (!currentAgent) return;
 
@@ -483,12 +535,7 @@ function BillingContent() {
         await loadData();
       } else {
         // Paid plans — redirect to Stripe Checkout hosted page
-        const { checkout_url } = await createCheckoutSession(
-          currentAgent.id,
-          planId
-        );
-        // Navigate to Stripe — page leaves so no need to reset subscribingTo
-        window.location.href = checkout_url;
+        await startCheckout(currentAgent.id, planId);
       }
     } catch (err: unknown) {
       const detail =

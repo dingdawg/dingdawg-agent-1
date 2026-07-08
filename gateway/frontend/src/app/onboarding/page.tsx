@@ -64,6 +64,13 @@ const STEP_LABELS = ["Intent", "Sector", "Plan", "Demo", "Setup", "Launch"] as c
 const TOTAL_STEPS = 6;
 const STORAGE_KEY = "dd_onboarding_done";
 
+// Map onboarding tier IDs to Stripe plan names (must match backend PRICING_TIERS)
+const PLAN_TO_STRIPE: Record<string, string> = {
+  growth: "starter",
+  pro: "pro",
+  free: "free",
+};
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Intent = "business" | "personal";
@@ -501,7 +508,7 @@ function OnboardingFlow() {
         markComplete();
         // Redirect to billing page with upgrade context
         router.push(
-          `/billing?upgrade=${selectedTier}&agent=${encodeURIComponent(handle)}&ref=onboarding`
+          `/billing?upgrade=${PLAN_TO_STRIPE[selectedTier] ?? selectedTier}&agent=${encodeURIComponent(handle)}&ref=onboarding`
         );
       }
     } catch {
