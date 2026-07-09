@@ -69,6 +69,8 @@ PUBLIC_SPEC_RULES: tuple[tuple[str, frozenset[str] | None, str], ...] = (
     ("/api/v1/templates", frozenset({"GET"}), "prefix"),
     # Agent handle availability check
     ("/api/v1/agents/handle", frozenset({"GET"}), "prefix"),
+    # Agent self-onboarding (anonymous request + poll + email approve)
+    ("/api/v1/agents/self-onboard", None, "prefix"),
     # Onboarding wizard public steps
     ("/api/v1/onboarding/sectors", frozenset({"GET"}), "exact"),
     ("/api/v1/onboarding/check-handle", frozenset({"GET"}), "prefix"),
@@ -152,10 +154,10 @@ def build_public_openapi_schema(app: Any) -> dict[str, Any]:
     """
     from fastapi.openapi.utils import get_openapi
 
+    from isg_agent.core.route_validator import iter_api_routes
+
     selected: list[APIRoute] = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for route in iter_api_routes(app.routes):
         if not route.include_in_schema:
             continue
         methods = frozenset(route.methods or set())
@@ -276,8 +278,14 @@ def build_public_openapi_schema(app: Any) -> dict[str, Any]:
 
 
 def _route_table_size(app: Any) -> int:
-    """Count APIRoutes currently registered — the cache-validity fingerprint."""
-    return sum(1 for r in app.routes if isinstance(r, APIRoute))
+    """Count APIRoutes currently registered — the cache-validity fingerprint.
+
+    Recurses into container routes (newer FastAPI include_router shape) via
+    iter_api_routes; a flat isinstance scan undercounts to 1 in production.
+    """
+    from isg_agent.core.route_validator import iter_api_routes
+
+    return sum(1 for _ in iter_api_routes(app.routes))
 
 
 def _cached_schema(request: Request) -> dict[str, Any]:
