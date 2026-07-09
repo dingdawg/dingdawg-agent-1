@@ -77,6 +77,65 @@ class TestSingleWriter:
             )
 
 
+class TestCheckoutHookFailOpen:
+    @pytest.mark.asyncio
+    async def test_receipt_failure_never_fails_a_completed_payment(self, db_path, monkeypatch):
+        """SCENARIO: The receipts table is locked by a backup job at the exact
+                   moment a customer's agent completes a paid checkout.
+        GIVEN:    A checkout that the payment handler reports as completed,
+                  and a receipt writer that raises on every insert attempt.
+        WHEN:     The ACP complete-checkout endpoint runs its trust-flywheel
+                  hook against that failing writer in production shape.
+        THEN:     The customer still receives 200 with their order — the
+                  receipt gap is a logged reconciliation item, never a
+                  failed payment.
+        """
+        from fastapi import FastAPI
+        from httpx import ASGITransport, AsyncClient
+
+        from isg_agent.api import deps
+        from isg_agent.api.routes import acp_routes
+        from isg_agent.db import receipts as receipts_mod
+
+        class _Session:
+            order_id = "order_fail_open"
+            total = 4200
+
+            def to_dict(self):
+                return {"order_id": self.order_id, "status": "completed"}
+
+        class _Handler:
+            def complete_checkout_session(self, req):
+                return _Session()
+
+        async def _boom(**kwargs):
+            raise RuntimeError("receipts table locked")
+
+        monkeypatch.setattr(acp_routes, "_get_handler", lambda: _Handler())
+        monkeypatch.setattr(receipts_mod, "persist_receipt", _boom)
+
+        app = FastAPI()
+
+        class _S:  # settings shim
+            def __init__(self, p): self.db_path, self.public_url = p, "https://api.dingdawg.com"
+
+        app.state.settings = _S(db_path)
+        app.include_router(acp_routes.router)
+
+        class _User:
+            user_id = "u-failopen"
+
+        app.dependency_overrides[deps.require_auth] = lambda: _User()
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.post(
+                "/api/v1/acp/checkout/sess1/complete",
+                json={"payment_data": {"handler_id": "card_tokenized", "payment_instrument": {"token": "tok_x"}}},
+            )
+        assert r.status_code == 200
+        assert r.json()["order_id"] == "order_fail_open"
+
+
 class TestTrustSummary:
     @pytest.mark.asyncio
     async def test_empty_trail_scores_null_not_zero(self, db_path):

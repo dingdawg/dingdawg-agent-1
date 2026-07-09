@@ -136,6 +136,12 @@ async def self_onboard(payload: SelfOnboardRequest, request: Request) -> JSONRes
     )
 
 
+#: Approval window — stale authority dies. A pending request older than
+#: this answers 410 on both approve and poll (oracle finding S1182: an
+#: approval link must not stay live in an inbox forever).
+REQUEST_TTL_HOURS = 72
+
+
 async def _load_request(db: aiosqlite.Connection, request_id: str) -> aiosqlite.Row:
     await db.execute(_TABLE_DDL)
     db.row_factory = aiosqlite.Row
@@ -145,6 +151,17 @@ async def _load_request(db: aiosqlite.Connection, request_id: str) -> aiosqlite.
         row = await cur.fetchone()
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown onboarding request.")
+    if row["status"] == "pending":
+        try:
+            created = datetime.fromisoformat(row["created_at"])
+            age_h = (datetime.now(timezone.utc) - created).total_seconds() / 3600
+        except ValueError:
+            age_h = float("inf")  # unparseable age = stale (fail closed)
+        if age_h > REQUEST_TTL_HOURS:
+            raise HTTPException(
+                status.HTTP_410_GONE,
+                f"Onboarding request expired after {REQUEST_TTL_HOURS}h — submit a new one.",
+            )
     return row
 
 

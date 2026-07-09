@@ -151,6 +151,36 @@ class TestApprovalAndDelivery:
         assert ok_p.json()["status"] == "pending"
 
     @pytest.mark.asyncio
+    async def test_expired_request_rejected_410(self, app, monkeypatch):
+        """SCENARIO: A business owner finds a week-old approval email for an
+                   agent request nobody remembers and clicks it anyway.
+        GIVEN:    A pending request whose created_at is older than the 72h
+                  approval window (aged directly in the store for the test).
+        WHEN:     The owner clicks approve and the agent later polls status
+                  using its still-held poll token from the original response.
+        THEN:     Both answer 410 Gone — stale authority must die, and the
+                  agent is told to start a fresh request.
+        """
+        import aiosqlite as _sqlite
+
+        async with await _client(app) as c:
+            body = await self._request(c)
+            rid, poll = body["request_id"], body["poll_token"]
+            async with _sqlite.connect(app.state.settings.db_path) as db:
+                await db.execute(
+                    "UPDATE agent_onboard_requests SET created_at='2020-01-01T00:00:00+00:00' WHERE id=?",
+                    (rid,),
+                )
+                await db.commit()
+            a = await c.get(
+                f"/api/v1/agents/self-onboard/{rid}/approve",
+                params={"token": self._approval_token(app)},
+            )
+            p = await c.get(f"/api/v1/agents/self-onboard/{rid}", params={"poll_token": poll})
+        assert a.status_code == 410
+        assert p.status_code == 410
+
+    @pytest.mark.asyncio
     async def test_unknown_request_id_404(self, app):
         """SCENARIO: An agent retries a poll after its state store was wiped
                    and reconstructs a request_id that never existed here.
