@@ -71,6 +71,32 @@ def _entrypoints(base: str) -> dict:
     }
 
 
+def _protocols(base: str) -> dict:
+    """Commerce/payment protocol surface for buyer agents (Wave 7a).
+
+    VAPORWARE LAW (tested): a protocol is "live" ONLY when its code serves on
+    this API today; everything else is "planned". Agents cache these claims —
+    a false "live" is a permanently broken promise.
+    """
+    return {
+        "acp": {
+            "status": "live",
+            "entrypoint": f"{base}/api/v1/acp/.well-known/acp-manifest",
+        },
+        "x402": {
+            "status": "planned",
+            "note": "HTTP-402 stablecoin micropayments (x402 Foundation spec)",
+        },
+        "ap2": {
+            "status": "planned",
+            "note": (
+                "Agent Payments Protocol (FIDO Alliance). DingDawg DID identity "
+                "+ ATR receipts complement AP2's open agent-identity gap."
+            ),
+        },
+    }
+
+
 def _render_llms_txt(base: str) -> str:
     e = _entrypoints(base)
     return f"""# DingDawg — Governed AI Agents Platform
@@ -149,6 +175,7 @@ async def agents_index(request: Request) -> JSONResponse:
                 "tagline": "Governed AI agents with verifiable receipts",
             },
             "entrypoints": _entrypoints(base),
+            "protocols": _protocols(base),
             "policies": {
                 "human_approval": (
                     "Purchases initiated by agents are confirmed by a human approver."

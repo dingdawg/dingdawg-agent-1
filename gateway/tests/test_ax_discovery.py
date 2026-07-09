@@ -104,6 +104,23 @@ class TestAgentsJson:
             assert url.startswith(BASE), f"non-canonical URL: {url}"
 
 
+class TestProtocols:
+    @pytest.mark.asyncio
+    async def test_protocols_block_with_vaporware_guard(self, app):
+        """Wave 7a: the protocols block tells buyer agents which payment rails
+        are real TODAY. The vaporware guard is load-bearing: a protocol may
+        claim "live" ONLY if its code serves on this API — a false "live"
+        cached by an agent kills platform trust permanently."""
+        doc = (await _get(app, "/.well-known/agents.json")).json()
+        protocols = doc["protocols"]
+        assert protocols["acp"]["status"] == "live"
+        assert protocols["acp"]["entrypoint"].startswith(BASE)
+        for name, meta in protocols.items():
+            assert meta["status"] in {"live", "planned"}, f"{name}: invalid status"
+            if meta["status"] == "live":
+                assert name == "acp", f"{name} claims live without shipped code"
+
+
 class TestDenyLeak:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("path", ["/llms.txt", "/.well-known/agents.json"])
