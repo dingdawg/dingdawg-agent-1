@@ -404,6 +404,17 @@ async def system_health(
                         "action": entry.get("action", "Heartbeat auto-recovery"),
                     })
 
+    # ── Env var diagnostics (ISG_AGENT_ prefix mapping) ──────────────────
+    # Shows which env vars are properly prefixed vs. bare-name fallbacks.
+    # Bare names appear green in Railway dashboard but are silently ignored
+    # by pydantic-settings.  This section helps operators verify their
+    # Railway env var names without trusting the dashboard display alone.
+    try:
+        from isg_agent.config import _env_var_diagnostics
+        env_diag = _env_var_diagnostics()
+    except Exception:
+        env_diag = {"error": "env_var_diagnostics unavailable"}
+
     # ── Overall status ────────────────────────────────────────────────────
     if db_status != "ok":
         overall_status = "critical"
@@ -434,6 +445,7 @@ async def system_health(
             "circuit_breakers": circuit_breakers,
             "auto_recovered": auto_recovered,
         },
+        "env_var_prefix": env_diag,
     }
 
 
@@ -749,6 +761,31 @@ async def run_self_test(
         "Security middleware registered at startup (constitution, rate-limiter, sanitizer, token-guard).",
         (time.monotonic() - t0) * 1000,
     )
+
+    # ── Test: env var prefix mapping ──────────────────────────────────────
+    t0 = time.monotonic()
+    try:
+        from isg_agent.config import _env_var_diagnostics
+        env_diag = _env_var_diagnostics()
+        bare_active = env_diag.get("bare_fallback_active", [])
+        if bare_active:
+            _record(
+                "env_var_prefix",
+                False,
+                f"Bare env vars used as fallback: {', '.join(bare_active)}. "
+                "Rename to ISG_AGENT_ prefixed equivalents in Railway dashboard. "
+                "Bare names appear green but are silently ignored by pydantic-settings.",
+                (time.monotonic() - t0) * 1000,
+            )
+        else:
+            _record(
+                "env_var_prefix",
+                True,
+                "All env vars use ISG_AGENT_ prefix — no bare-name fallbacks active.",
+                (time.monotonic() - t0) * 1000,
+            )
+    except Exception as exc:
+        _record("env_var_prefix", False, f"Env var prefix check failed: {exc}", (time.monotonic() - t0) * 1000)
 
     passed_count = sum(1 for r in results if r["result"] == "pass")
     total_count = len(results)

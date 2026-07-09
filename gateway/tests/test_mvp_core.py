@@ -822,8 +822,13 @@ class TestAuthRoutes:
     """
 
     @pytest.fixture(autouse=True)
-    def _configure_auth(self, tmp_path):
-        """Pre-configure the auth module with a temp-file DB and test secret."""
+    def _configure_auth(self, tmp_path, app):
+        """Point the auth module at a temp-file DB and test secret.
+
+        Depends on ``app`` because ``create_app()`` now configures auth from
+        settings at construction time — this override must run AFTER that,
+        or registrations land in the real ``data/agent.db``.
+        """
         from isg_agent.api.routes.auth import _set_auth_config
         db_file = str(tmp_path / "test_auth.db")
         _set_auth_config(db_path=db_file, secret_key="test-secret-for-auth-routes")

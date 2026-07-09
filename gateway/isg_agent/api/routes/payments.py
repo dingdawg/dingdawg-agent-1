@@ -60,17 +60,24 @@ router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 # These are either read from env vars (preferred) or fall back to lookup
 # by product name via the Stripe API.
 # To set up: create Products + Prices in your Stripe dashboard, then
-# set STRIPE_PRICE_STARTER, STRIPE_PRICE_PRO, STRIPE_PRICE_ENTERPRISE.
+# set ISG_AGENT_STRIPE_PRICE_* (canonical for pydantic-settings).
+# Bare STRIPE_PRICE_* names (without ISG_AGENT_ prefix) are a legacy
+# fallback — they work via os.environ.get() but ARE NOT read by
+# pydantic-settings Settings class.
+# Railway dashboard MUST show ISG_AGENT_ prefixed names — bare names appear
+# green in Railway UI but are silently ignored by pydantic-settings.
+# Verify by curling the /api/v1/admin/system/health endpoint and checking
+# the env_var_prefix section — never trust the dashboard display alone.
 # ---------------------------------------------------------------------------
 _STRIPE_PRICE_IDS: dict[str, str] = {
-    # Monthly prices
-    "pro":               os.environ.get("STRIPE_PRICE_PRO_MONTHLY",        os.environ.get("STRIPE_PRICE_PRO", "")),
-    "team":              os.environ.get("STRIPE_PRICE_TEAM_MONTHLY",        ""),
-    "enterprise":        os.environ.get("STRIPE_PRICE_ENTERPRISE_MONTHLY",  os.environ.get("STRIPE_PRICE_ENTERPRISE", "")),
+    # Monthly prices — check ISG_AGENT_ prefix first (canonical), fall back to bare names
+    "pro":               os.environ.get("ISG_AGENT_STRIPE_PRICE_PRO_MONTHLY",        os.environ.get("STRIPE_PRICE_PRO_MONTHLY",        os.environ.get("ISG_AGENT_STRIPE_PRICE_PRO",        os.environ.get("STRIPE_PRICE_PRO", "")))),
+    "team":              os.environ.get("ISG_AGENT_STRIPE_PRICE_TEAM_MONTHLY",        os.environ.get("STRIPE_PRICE_TEAM_MONTHLY",        "")),
+    "enterprise":        os.environ.get("ISG_AGENT_STRIPE_PRICE_ENTERPRISE_MONTHLY",  os.environ.get("STRIPE_PRICE_ENTERPRISE_MONTHLY",  os.environ.get("ISG_AGENT_STRIPE_PRICE_ENTERPRISE",  os.environ.get("STRIPE_PRICE_ENTERPRISE", "")))),
     # Annual prices (20% off)
-    "pro_annual":        os.environ.get("STRIPE_PRICE_PRO_ANNUAL",          ""),
-    "team_annual":       os.environ.get("STRIPE_PRICE_TEAM_ANNUAL",         ""),
-    "enterprise_annual": os.environ.get("STRIPE_PRICE_ENTERPRISE_ANNUAL",   ""),
+    "pro_annual":        os.environ.get("ISG_AGENT_STRIPE_PRICE_PRO_ANNUAL",          os.environ.get("STRIPE_PRICE_PRO_ANNUAL",          "")),
+    "team_annual":       os.environ.get("ISG_AGENT_STRIPE_PRICE_TEAM_ANNUAL",         os.environ.get("STRIPE_PRICE_TEAM_ANNUAL",         "")),
+    "enterprise_annual": os.environ.get("ISG_AGENT_STRIPE_PRICE_ENTERPRISE_ANNUAL",   os.environ.get("STRIPE_PRICE_ENTERPRISE_ANNUAL",   "")),
 }
 
 
@@ -214,20 +221,20 @@ def _get_payment_gate(request: Request) -> PaymentGate:
 
 
 def _get_app_domain(request: Request) -> str:
-    """Return the canonical public base URL for Stripe success/cancel redirects.
+    """Return the canonical frontend base URL for Stripe success/cancel redirects.
 
     Priority order (highest to lowest):
-    1. ``ISG_AGENT_PUBLIC_URL`` / ``settings.public_url`` — canonical domain.
+    1. ``ISG_AGENT_FRONTEND_URL`` / ``settings.frontend_url`` — canonical frontend domain.
        Prevents leaking the internal Railway hostname in Stripe redirect URLs.
     2. Legacy domain/app_url settings fields (kept for backward compat).
     3. Fallback: construct from request — local dev only.
     """
     from isg_agent.config import get_settings
 
-    # Primary: use the explicit public URL env var
+    # Primary: use the explicit frontend URL env var
     cfg = get_settings()
-    if cfg.public_url:
-        return cfg.public_url.rstrip("/")
+    if cfg.frontend_url:
+        return cfg.frontend_url.rstrip("/")
     # Legacy: check app.state settings
     state_settings = getattr(request.app.state, "settings", None)
     if state_settings is not None:
@@ -293,7 +300,7 @@ async def create_checkout_session(
             detail="Payment processing is not configured",
         )
 
-    if body.plan not in {"pro", "team", "enterprise"}:
+    if body.plan not in PRICING_TIERS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid plan: {body.plan!r}. Valid plans: {list(PRICING_TIERS.keys())}",
@@ -305,13 +312,22 @@ async def create_checkout_session(
             detail="Free plan does not require a checkout session. Use POST /subscribe with plan=free.",
         )
 
+    if body.plan == "payg":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pay-as-you-go is metered billing, not a checkout session. Use POST /subscribe with plan=payg.",
+        )
+
     price_id = _get_price_id_for_plan(f"{body.plan}_annual" if body.billing == "annual" else body.plan)
     if not price_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"Stripe price ID not configured for plan '{body.plan}'. "
-                f"Set STRIPE_PRICE_{body.plan.upper()} environment variable."
+                f"Set ISG_AGENT_STRIPE_PRICE_{body.plan.upper()} environment variable. "
+                f"Note: pydantic-settings uses env_prefix='ISG_AGENT_' — bare "
+                f"STRIPE_PRICE_{body.plan.upper()} (without prefix) is silently ignored. "
+                f"Railway dashboard MUST show the ISG_AGENT_ prefixed name."
             ),
         )
 
@@ -670,7 +686,7 @@ async def _process_stripe_event(
             metadata = data_object.get("metadata", {})
             user_id = metadata.get("user_id", "") or data_object.get("client_reference_id", "")
             agent_id = metadata.get("agent_id", "")
-            plan = metadata.get("plan", "starter")
+            plan = metadata.get("plan", "pro")
             stripe_customer_id = data_object.get("customer", "")
             stripe_subscription_id = data_object.get("subscription", "")
 
@@ -716,7 +732,7 @@ async def _process_stripe_event(
             if not plan and items_data:
                 price_meta = items_data[0].get("price", {}).get("metadata", {})
                 plan = price_meta.get("plan", "")
-            plan = plan or "starter"
+            plan = plan or "pro"
 
             if user_id and meter:
                 try:
@@ -1086,7 +1102,7 @@ async def create_subscription(
 ) -> SubscribeResponse:
     """Create or update a subscription plan for an agent.
 
-    Valid plans: free, starter ($29/mo), pro ($79/mo), enterprise ($199/mo).
+    Valid plans: free, pro ($49/mo), team ($149/mo), enterprise ($499/mo), payg (metered).
     """
     meter = _get_usage_meter(request)
     if meter is None:
@@ -1095,7 +1111,7 @@ async def create_subscription(
             detail="Usage metering is not configured",
         )
 
-    if body.plan not in {"pro", "team", "enterprise"}:
+    if body.plan not in PRICING_TIERS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid plan: {body.plan!r}. Valid plans: {list(PRICING_TIERS.keys())}",

@@ -5,7 +5,7 @@ register, create agents, configure integrations, exercise payments, etc.
 Tests run against a fully-initialised in-process ASGI app (no network).
 
 Run with:
-    cd /home/joe-rangel/Desktop/DingDawg-Agent-1/gateway
+    cd <repo-root>/gateway
     python3 -m pytest tests/test_integration_workflows.py -v --tb=short
 
 Design rules:
@@ -54,6 +54,15 @@ async def wf_client(tmp_path) -> AsyncIterator[AsyncClient]:
     os.environ["ISG_AGENT_DB_PATH"] = db_file
     os.environ["ISG_AGENT_SECRET_KEY"] = _SECRET
     os.environ["ISG_AGENT_DEPLOYMENT_ENV"] = "test"
+    # Tests assume Stripe is UNCONFIGURED (503 paths). The config module
+    # falls back to bare STRIPE_* names when the prefixed vars are empty,
+    # so a developer machine with a real STRIPE_SECRET_KEY would silently
+    # configure Stripe here — blank out both spellings and restore after.
+    _stripe_saved = {
+        k: os.environ.pop(k, None)
+        for k in ("ISG_AGENT_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY",
+                  "ISG_AGENT_STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET")
+    }
     get_settings.cache_clear()
 
     from isg_agent.app import create_app, lifespan
@@ -67,6 +76,9 @@ async def wf_client(tmp_path) -> AsyncIterator[AsyncClient]:
     os.environ.pop("ISG_AGENT_DB_PATH", None)
     os.environ.pop("ISG_AGENT_SECRET_KEY", None)
     os.environ.pop("ISG_AGENT_DEPLOYMENT_ENV", None)
+    for k, v in _stripe_saved.items():
+        if v is not None:
+            os.environ[k] = v
     get_settings.cache_clear()
 
 
@@ -225,7 +237,7 @@ class TestWorkflow01OnboardingJourney:
         health_body = health_resp.json()
         assert health_body["status"] == "healthy"
         assert health_body["version"]
-        assert health_body["database"] == "connected"
+        assert health_body["database"] == "pass"
 
 
 # ---------------------------------------------------------------------------
@@ -510,7 +522,7 @@ class TestWorkflow05PaymentBillingJourney:
         # Checkout session without Stripe configured → 503
         checkout_resp = await client.post(
             "/api/v1/payments/create-checkout-session",
-            json={"plan": "starter", "agent_id": agent_id},
+            json={"plan": "pro", "agent_id": agent_id},
             headers=_auth_headers(token),
         )
         assert checkout_resp.status_code == 503

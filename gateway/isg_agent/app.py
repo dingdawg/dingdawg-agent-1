@@ -710,9 +710,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("ISG Agent 1 gateway shut down")
 
 
-_is_production = os.environ.get("ISG_AGENT_DEPLOYMENT_ENV", "").lower() == "production"
-
-
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -720,13 +717,19 @@ def create_app() -> FastAPI:
         Configured FastAPI instance with health endpoint, middleware,
         and all route modules registered.
     """
+    # Built-in FastAPI docs are disabled in EVERY environment: the
+    # auto-generated spec exposes all 290+ routes (admin, internal,
+    # WebAuthn, webhooks — IP leakage).  A curated, allowlist-filtered
+    # public spec is served instead at /docs + /openapi.json by
+    # isg_agent.api.routes.public_docs (same behavior in dev, test,
+    # and production — no environment drift).
     app = FastAPI(
         title=__app_name__,
         description="Security-hardened, governance-first autonomous AI agent platform",
         version=__version__,
-        docs_url=None if _is_production else "/docs",
-        redoc_url=None if _is_production else "/redoc",
-        openapi_url=None if _is_production else "/openapi.json",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
         lifespan=lifespan,
     )
 
@@ -741,6 +744,15 @@ def create_app() -> FastAPI:
 
     _settings = get_settings()
     _origins = _settings.allowed_origins_list
+
+    # Configure the auth module at construction time, not just lifespan
+    # startup: test clients (httpx ASGITransport) and any consumer that
+    # skips the lifespan otherwise leave auth pointed at the module
+    # default "data/agent.db" while the rest of the app uses
+    # settings.db_path — a silent split-brain across two databases.
+    # The lifespan call below remains (idempotent) for uvicorn runs.
+    from isg_agent.api.routes.auth import _set_auth_config as _early_auth_config
+    _early_auth_config(db_path=_settings.db_path, secret_key=_settings.secret_key)
 
     # Production allowlist — never use wildcard for authenticated endpoints.
     # Widget endpoints (/api/v1/widget/*) allow any origin via WidgetCORSMiddleware.
@@ -896,6 +908,7 @@ def create_app() -> FastAPI:
     from isg_agent.api.routes.auth_passkey import router as auth_passkey_router
     from isg_agent.api.routes.auth_mfa import router as auth_mfa_router
     from isg_agent.api.routes.openapi_gpt import router as openapi_gpt_router
+    from isg_agent.api.routes.public_docs import router as public_docs_router
     from isg_agent.capabilities.api_routes import router as business_ops_router
     from isg_agent.api.routes.gpt_actions import router as gpt_actions_router
     from isg_agent.api.routes.zapier import router as zapier_router
@@ -907,7 +920,6 @@ def create_app() -> FastAPI:
     from isg_agent.api.routes.health import router as health_router
     from isg_agent.api.routes.developers import router as developers_router
     from isg_agent.api.routes.console_governance import router as console_governance_router
-
     app.include_router(console_governance_router)
     app.include_router(health_router)
     app.include_router(auth_router)
@@ -949,6 +961,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_passkey_router)
     app.include_router(auth_mfa_router)
     app.include_router(openapi_gpt_router)
+    app.include_router(public_docs_router)
     app.include_router(business_ops_router)
     app.include_router(gpt_actions_router)
     app.include_router(zapier_router)

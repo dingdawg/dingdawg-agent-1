@@ -189,15 +189,15 @@ class TestCreateCheckoutSession:
         stripe_client = _make_stripe_client()
         app = _create_test_app(auth_user_id="user_1", stripe_client=stripe_client)
 
-        # Ensure no price ID is set for this plan
+        # Ensure no price ID is set for this (valid, canonical) plan
         with patch(
             "isg_agent.api.routes.payments._STRIPE_PRICE_IDS",
-            {"starter": "", "pro": "", "enterprise": ""},
+            {"team": "", "pro": "", "enterprise": ""},
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/api/v1/payments/create-checkout-session",
-                    json={"plan": "starter", "agent_id": "agent_1"},
+                    json={"plan": "team", "agent_id": "agent_1"},
                 )
         assert resp.status_code == 400
         assert "price ID not configured" in resp.json()["detail"]
@@ -215,18 +215,18 @@ class TestCreateCheckoutSession:
         mock_search_result.data = []
 
         with (
-            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "price_starter_test", "pro": "", "enterprise": ""}),
+            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "", "pro": "price_pro_test", "enterprise": ""}),
             patch("isg_agent.api.routes.payments.stripe") as mock_stripe,
         ):
-            mock_stripe.Customer.search.return_value = mock_search_result
-            mock_stripe.Customer.create.return_value = MagicMock(id="cus_new_123")
-            mock_stripe.checkout.Session.create.return_value = mock_session
+            mock_stripe.Customer.list_async = AsyncMock(return_value=mock_search_result)
+            mock_stripe.Customer.create_async = AsyncMock(return_value=MagicMock(id="cus_new_123"))
+            mock_stripe.checkout.Session.create_async = AsyncMock(return_value=mock_session)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/api/v1/payments/create-checkout-session",
-                    json={"plan": "starter", "agent_id": "agent_1"},
+                    json={"plan": "pro", "agent_id": "agent_1"},
                 )
 
         assert resp.status_code == 201
@@ -246,24 +246,25 @@ class TestCreateCheckoutSession:
         mock_session = _mock_checkout_session(session_id="cs_test_existing")
 
         with (
-            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "price_starter_test", "pro": "", "enterprise": ""}),
+            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "", "pro": "price_pro_test", "enterprise": ""}),
             patch("isg_agent.api.routes.payments.stripe") as mock_stripe,
         ):
-            mock_stripe.Customer.search.return_value = mock_search_result
-            mock_stripe.checkout.Session.create.return_value = mock_session
+            mock_stripe.Customer.list_async = AsyncMock(return_value=mock_search_result)
+            mock_stripe.Customer.create_async = AsyncMock()
+            mock_stripe.checkout.Session.create_async = AsyncMock(return_value=mock_session)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/api/v1/payments/create-checkout-session",
-                    json={"plan": "starter", "agent_id": "agent_1"},
+                    json={"plan": "pro", "agent_id": "agent_1"},
                 )
 
         assert resp.status_code == 201
         # Should NOT have called create
-        mock_stripe.Customer.create.assert_not_called()
+        mock_stripe.Customer.create_async.assert_not_called()
         # Should have passed existing customer ID to session
-        call_kwargs = mock_stripe.checkout.Session.create.call_args[1]
+        call_kwargs = mock_stripe.checkout.Session.create_async.call_args[1]
         assert call_kwargs["customer"] == "cus_existing_456"
 
     @pytest.mark.asyncio
@@ -279,18 +280,18 @@ class TestCreateCheckoutSession:
         mock_search_result.data = []
 
         with (
-            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "price_starter_test", "pro": "", "enterprise": ""}),
+            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "", "pro": "price_pro_test", "enterprise": ""}),
             patch("isg_agent.api.routes.payments.stripe") as mock_stripe,
         ):
-            mock_stripe.Customer.search.return_value = mock_search_result
-            mock_stripe.Customer.create.return_value = MagicMock(id="cus_new")
+            mock_stripe.Customer.list_async = AsyncMock(return_value=mock_search_result)
+            mock_stripe.Customer.create_async = AsyncMock(return_value=MagicMock(id="cus_new"))
             mock_stripe.StripeError = FakeStripeError
-            mock_stripe.checkout.Session.create.side_effect = FakeStripeError("Card declined")
+            mock_stripe.checkout.Session.create_async = AsyncMock(side_effect=FakeStripeError("Card declined"))
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/api/v1/payments/create-checkout-session",
-                    json={"plan": "starter", "agent_id": "agent_1"},
+                    json={"plan": "pro", "agent_id": "agent_1"},
                 )
 
         assert resp.status_code == 502
@@ -309,9 +310,9 @@ class TestCreateCheckoutSession:
             patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "", "pro": "price_pro_test", "enterprise": ""}),
             patch("isg_agent.api.routes.payments.stripe") as mock_stripe,
         ):
-            mock_stripe.Customer.search.return_value = mock_search_result
-            mock_stripe.Customer.create.return_value = MagicMock(id="cus_1")
-            mock_stripe.checkout.Session.create.return_value = mock_session
+            mock_stripe.Customer.list_async = AsyncMock(return_value=mock_search_result)
+            mock_stripe.Customer.create_async = AsyncMock(return_value=MagicMock(id="cus_1"))
+            mock_stripe.checkout.Session.create_async = AsyncMock(return_value=mock_session)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -320,7 +321,7 @@ class TestCreateCheckoutSession:
                     json={"plan": "pro", "agent_id": "agent_pro"},
                 )
 
-        call_kwargs = mock_stripe.checkout.Session.create.call_args[1]
+        call_kwargs = mock_stripe.checkout.Session.create_async.call_args[1]
         assert call_kwargs["mode"] == "subscription"
         assert call_kwargs["line_items"][0]["price"] == "price_pro_test"
         assert call_kwargs["line_items"][0]["quantity"] == 1
@@ -339,9 +340,9 @@ class TestCreateCheckoutSession:
             patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "", "pro": "", "enterprise": "price_enterprise_test"}),
             patch("isg_agent.api.routes.payments.stripe") as mock_stripe,
         ):
-            mock_stripe.Customer.search.return_value = mock_search_result
-            mock_stripe.Customer.create.return_value = MagicMock(id="cus_meta")
-            mock_stripe.checkout.Session.create.return_value = mock_session
+            mock_stripe.Customer.list_async = AsyncMock(return_value=mock_search_result)
+            mock_stripe.Customer.create_async = AsyncMock(return_value=MagicMock(id="cus_meta"))
+            mock_stripe.checkout.Session.create_async = AsyncMock(return_value=mock_session)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -350,7 +351,7 @@ class TestCreateCheckoutSession:
                     json={"plan": "enterprise", "agent_id": "agent_ent"},
                 )
 
-        call_kwargs = mock_stripe.checkout.Session.create.call_args[1]
+        call_kwargs = mock_stripe.checkout.Session.create_async.call_args[1]
         metadata = call_kwargs["metadata"]
         assert metadata["user_id"] == "user_meta"
         assert metadata["agent_id"] == "agent_ent"
@@ -367,26 +368,26 @@ class TestCreateCheckoutSession:
         mock_session = _mock_checkout_session()
 
         with (
-            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "price_s", "pro": "", "enterprise": ""}),
+            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "", "pro": "price_s", "enterprise": ""}),
             patch("isg_agent.api.routes.payments.stripe") as mock_stripe,
         ):
-            mock_stripe.Customer.search.return_value = mock_search_result
-            mock_stripe.Customer.create.return_value = MagicMock(id="cus_1")
-            mock_stripe.checkout.Session.create.return_value = mock_session
+            mock_stripe.Customer.list_async = AsyncMock(return_value=mock_search_result)
+            mock_stripe.Customer.create_async = AsyncMock(return_value=MagicMock(id="cus_1"))
+            mock_stripe.checkout.Session.create_async = AsyncMock(return_value=mock_session)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 await client.post(
                     "/api/v1/payments/create-checkout-session",
                     json={
-                        "plan": "starter",
+                        "plan": "pro",
                         "agent_id": "a1",
                         "success_url": "https://myapp.com/success",
                         "cancel_url": "https://myapp.com/cancel",
                     },
                 )
 
-        call_kwargs = mock_stripe.checkout.Session.create.call_args[1]
+        call_kwargs = mock_stripe.checkout.Session.create_async.call_args[1]
         assert call_kwargs["success_url"] == "https://myapp.com/success"
         assert call_kwargs["cancel_url"] == "https://myapp.com/cancel"
 
@@ -407,18 +408,18 @@ class TestCreateCheckoutSession:
         mock_session = _mock_checkout_session()
 
         with (
-            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "price_s", "pro": "", "enterprise": ""}),
+            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "", "pro": "price_s", "enterprise": ""}),
             patch("isg_agent.api.routes.payments.stripe") as mock_stripe,
         ):
-            mock_stripe.Customer.search.return_value = mock_search_result
-            mock_stripe.Customer.create.return_value = MagicMock(id="cus_1")
-            mock_stripe.checkout.Session.create.return_value = mock_session
+            mock_stripe.Customer.list_async = AsyncMock(return_value=mock_search_result)
+            mock_stripe.Customer.create_async = AsyncMock(return_value=MagicMock(id="cus_1"))
+            mock_stripe.checkout.Session.create_async = AsyncMock(return_value=mock_session)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/api/v1/payments/create-checkout-session",
-                    json={"plan": "starter", "agent_id": "a1"},
+                    json={"plan": "pro", "agent_id": "a1"},
                 )
 
         assert resp.status_code == 201
@@ -454,7 +455,7 @@ class TestWebhookSubscriptionEvents:
             "metadata": {
                 "user_id": "user_checkout",
                 "agent_id": "agent_checkout",
-                "plan": "starter",
+                "plan": "pro",
             },
         }
         mock_stripe_client.verify_webhook.return_value = _webhook_event(
@@ -485,7 +486,7 @@ class TestWebhookSubscriptionEvents:
             agent_id="agent_checkout", user_id="user_checkout"
         )
         assert sub is not None
-        assert sub["plan"] == "starter"
+        assert sub["plan"] == "pro"
         assert sub["stripe_customer_id"] == "cus_test_abc"
         assert sub["stripe_subscription_id"] == "sub_test_abc"
 
@@ -498,8 +499,8 @@ class TestWebhookSubscriptionEvents:
         assert audit_call["event_type"] == "checkout_session_completed"
 
     @pytest.mark.asyncio
-    async def test_checkout_session_completed_invalid_plan_defaults_to_starter(self, tmp_path):
-        """checkout.session.completed with unknown plan still creates subscription."""
+    async def test_checkout_session_completed_missing_plan_defaults_to_pro(self, tmp_path):
+        """checkout.session.completed with no plan in metadata defaults to 'pro'."""
         db_path = str(tmp_path / "test.db")
         meter = UsageMeter(db_path=db_path)
         await meter.init_tables()
@@ -514,7 +515,7 @@ class TestWebhookSubscriptionEvents:
             "metadata": {
                 "user_id": "user_456",
                 "agent_id": "agent_456",
-                "plan": "starter",  # valid plan
+                # plan intentionally omitted -- handler defaults to "pro"
             },
         }
         mock_stripe_client.verify_webhook.return_value = _webhook_event(
@@ -537,6 +538,7 @@ class TestWebhookSubscriptionEvents:
         assert resp.status_code == 200
         sub = await meter.get_user_subscription(agent_id="agent_456", user_id="user_456")
         assert sub is not None
+        assert sub["plan"] == "pro"
 
     @pytest.mark.asyncio
     async def test_invoice_paid_handled(self):
@@ -792,7 +794,7 @@ class TestBillingPortal:
         await meter.create_subscription(
             agent_id="agent_portal",
             user_id="user_portal",
-            plan="starter",
+            plan="pro",
             stripe_customer_id="cus_portal_123",
             stripe_subscription_id="sub_portal_123",
         )
@@ -807,7 +809,7 @@ class TestBillingPortal:
         mock_portal = _mock_portal_session()
 
         with patch("isg_agent.api.routes.payments.stripe") as mock_stripe:
-            mock_stripe.billing_portal.Session.create.return_value = mock_portal
+            mock_stripe.billing_portal.Session.create_async = AsyncMock(return_value=mock_portal)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -818,8 +820,8 @@ class TestBillingPortal:
         assert resp.status_code == 200
         data = resp.json()
         assert data["portal_url"] == "https://billing.stripe.com/session/test_portal"
-        mock_stripe.billing_portal.Session.create.assert_called_once()
-        call_kwargs = mock_stripe.billing_portal.Session.create.call_args[1]
+        mock_stripe.billing_portal.Session.create_async.assert_called_once()
+        call_kwargs = mock_stripe.billing_portal.Session.create_async.call_args[1]
         assert call_kwargs["customer"] == "cus_portal_123"
 
     @pytest.mark.asyncio
@@ -842,8 +844,8 @@ class TestBillingPortal:
         mock_portal = _mock_portal_session(url="https://billing.stripe.com/found")
 
         with patch("isg_agent.api.routes.payments.stripe") as mock_stripe:
-            mock_stripe.Customer.search.return_value = mock_search_result
-            mock_stripe.billing_portal.Session.create.return_value = mock_portal
+            mock_stripe.Customer.search_async = AsyncMock(return_value=mock_search_result)
+            mock_stripe.billing_portal.Session.create_async = AsyncMock(return_value=mock_portal)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -863,7 +865,7 @@ class TestBillingPortal:
         await meter.create_subscription(
             agent_id="agent_err",
             user_id="user_err",
-            plan="starter",
+            plan="pro",
             stripe_customer_id="cus_err_123",
         )
 
@@ -879,7 +881,9 @@ class TestBillingPortal:
 
         with patch("isg_agent.api.routes.payments.stripe") as mock_stripe:
             mock_stripe.StripeError = FakeStripeError
-            mock_stripe.billing_portal.Session.create.side_effect = FakeStripeError("Portal error")
+            mock_stripe.billing_portal.Session.create_async = AsyncMock(
+                side_effect=FakeStripeError("Portal error")
+            )
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get(
@@ -957,7 +961,7 @@ class TestSubscriptionStatus:
         await meter.create_subscription(
             agent_id="agent_local",
             user_id="user_local",
-            plan="starter",
+            plan="pro",
             stripe_customer_id="cus_local",
             # No stripe_subscription_id
         )
@@ -974,7 +978,7 @@ class TestSubscriptionStatus:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["plan"] == "starter"
+        assert data["plan"] == "pro"
         assert data["stripe_status"] == "local_only"
         assert data["is_active"] is True
 
@@ -1004,7 +1008,7 @@ class TestSubscriptionStatus:
         )
 
         with patch("isg_agent.api.routes.payments.stripe") as mock_stripe:
-            mock_stripe.Subscription.retrieve.return_value = mock_stripe_sub
+            mock_stripe.Subscription.retrieve_async = AsyncMock(return_value=mock_stripe_sub)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -1016,7 +1020,7 @@ class TestSubscriptionStatus:
         assert data["stripe_status"] == "active"
         assert data["is_active"] is True
         assert data["stripe_subscription_id"] == "sub_live_abc"
-        mock_stripe.Subscription.retrieve.assert_called_once_with("sub_live_abc")
+        mock_stripe.Subscription.retrieve_async.assert_called_once_with("sub_live_abc")
 
     @pytest.mark.asyncio
     async def test_stripe_retrieve_failure_falls_back_to_local(self, tmp_path):
@@ -1061,7 +1065,7 @@ class TestSubscriptionStatus:
         await meter.create_subscription(
             agent_id="agent_pastdue",
             user_id="user_pastdue",
-            plan="starter",
+            plan="pro",
             stripe_customer_id="cus_pastdue",
             stripe_subscription_id="sub_pastdue",
         )
@@ -1076,7 +1080,7 @@ class TestSubscriptionStatus:
         mock_stripe_sub = _mock_stripe_subscription(status="past_due")
 
         with patch("isg_agent.api.routes.payments.stripe") as mock_stripe:
-            mock_stripe.Subscription.retrieve.return_value = mock_stripe_sub
+            mock_stripe.Subscription.retrieve_async = AsyncMock(return_value=mock_stripe_sub)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -1159,11 +1163,11 @@ class TestPriceIdMapping:
         assert result == ""
 
     def test_price_id_dict_has_all_paid_plans(self):
-        """_STRIPE_PRICE_IDS has keys for all paid plans."""
+        """_STRIPE_PRICE_IDS has keys for all canonical paid plans."""
         from isg_agent.api.routes.payments import _STRIPE_PRICE_IDS
 
-        assert "starter" in _STRIPE_PRICE_IDS
         assert "pro" in _STRIPE_PRICE_IDS
+        assert "team" in _STRIPE_PRICE_IDS
         assert "enterprise" in _STRIPE_PRICE_IDS
         # Free plan should NOT have a price ID (it's free)
         assert "free" not in _STRIPE_PRICE_IDS
@@ -1178,10 +1182,10 @@ class TestUpgradeFlow:
     """End-to-end simulation: checkout → webhook → subscription activated."""
 
     @pytest.mark.asyncio
-    async def test_full_upgrade_flow_starter(self, tmp_path):
+    async def test_full_upgrade_flow_team(self, tmp_path):
         """
         Full flow:
-        1. User calls POST /create-checkout-session with plan=starter
+        1. User calls POST /create-checkout-session with plan=team
         2. Gets back checkout_url
         3. (User pays on Stripe)
         4. Stripe fires checkout.session.completed webhook
@@ -1214,18 +1218,18 @@ class TestUpgradeFlow:
         mock_search_result.data = []
 
         with (
-            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "price_e2e", "pro": "", "enterprise": ""}),
+            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"team": "price_e2e", "pro": "", "enterprise": ""}),
             patch("isg_agent.api.routes.payments.stripe") as mock_stripe,
         ):
-            mock_stripe.Customer.search.return_value = mock_search_result
-            mock_stripe.Customer.create.return_value = MagicMock(id="cus_e2e")
-            mock_stripe.checkout.Session.create.return_value = mock_session
+            mock_stripe.Customer.list_async = AsyncMock(return_value=mock_search_result)
+            mock_stripe.Customer.create_async = AsyncMock(return_value=MagicMock(id="cus_e2e"))
+            mock_stripe.checkout.Session.create_async = AsyncMock(return_value=mock_session)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app_checkout), base_url="http://test") as client:
                 resp = await client.post(
                     "/api/v1/payments/create-checkout-session",
-                    json={"plan": "starter", "agent_id": "agent_e2e"},
+                    json={"plan": "team", "agent_id": "agent_e2e"},
                 )
 
         assert resp.status_code == 201
@@ -1247,7 +1251,7 @@ class TestUpgradeFlow:
             "metadata": {
                 "user_id": "user_e2e",
                 "agent_id": "agent_e2e",
-                "plan": "starter",
+                "plan": "team",
             },
         }
         stripe_client.verify_webhook.return_value = _webhook_event(
@@ -1266,7 +1270,7 @@ class TestUpgradeFlow:
         # Step 3: Verify subscription activated
         sub = await meter.get_user_subscription(agent_id="agent_e2e", user_id="user_e2e")
         assert sub is not None
-        assert sub["plan"] == "starter"
+        assert sub["plan"] == "team"
         assert sub["stripe_customer_id"] == "cus_e2e"
         assert sub["stripe_subscription_id"] == "sub_e2e"
 
@@ -1284,7 +1288,7 @@ class TestUpgradeFlow:
         )
 
         with patch("isg_agent.api.routes.payments.stripe") as mock_stripe:
-            mock_stripe.Subscription.retrieve.return_value = mock_stripe_sub
+            mock_stripe.Subscription.retrieve_async = AsyncMock(return_value=mock_stripe_sub)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app_status), base_url="http://test") as client:
@@ -1292,7 +1296,7 @@ class TestUpgradeFlow:
 
         assert resp.status_code == 200
         status_data = resp.json()
-        assert status_data["plan"] == "starter"
+        assert status_data["plan"] == "team"
         assert status_data["stripe_status"] == "active"
         assert status_data["is_active"] is True
 
@@ -1317,19 +1321,20 @@ class TestUpgradeFlow:
         mock_session = _mock_checkout_session()
 
         with (
-            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "price_s", "pro": "", "enterprise": ""}),
+            patch("isg_agent.api.routes.payments._STRIPE_PRICE_IDS", {"starter": "", "pro": "price_s", "enterprise": ""}),
             patch("isg_agent.api.routes.payments.stripe") as mock_stripe,
         ):
-            mock_stripe.Customer.search.return_value = mock_search_result
-            mock_stripe.checkout.Session.create.return_value = mock_session
+            mock_stripe.Customer.list_async = AsyncMock(return_value=mock_search_result)
+            mock_stripe.Customer.create_async = AsyncMock()
+            mock_stripe.checkout.Session.create_async = AsyncMock(return_value=mock_session)
             mock_stripe.StripeError = Exception
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/api/v1/payments/create-checkout-session",
-                    json={"plan": "starter", "agent_id": "agent_dup"},
+                    json={"plan": "pro", "agent_id": "agent_dup"},
                 )
 
         assert resp.status_code == 201
         # Customer.create should NOT be called — we reused existing
-        mock_stripe.Customer.create.assert_not_called()
+        mock_stripe.Customer.create_async.assert_not_called()

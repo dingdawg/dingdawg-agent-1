@@ -8,8 +8,16 @@ Event name: agent_calls
 Customer mapping: by_id (stripe_customer_id)
 
 Usage:
-    meter = StripeMeteringClient(api_key=os.environ["STRIPE_SECRET_KEY"])
+    meter = StripeMeteringClient()
     await meter.record_agent_call(stripe_customer_id="cus_xxx", quantity=1, agent_id="compliance")
+
+Stripe API key resolution order:
+    1. Explicit api_key argument
+    2. ISG_AGENT_STRIPE_SECRET_KEY env var (canonical, matches pydantic-settings)
+    3. STRIPE_SECRET_KEY env var (legacy fallback)
+
+Warning: Railway dashboard MUST show ISG_AGENT_STRIPE_SECRET_KEY, not bare STRIPE_SECRET_KEY.
+Bare names appear green in Railway UI but are silently ignored by pydantic-settings.
 """
 from __future__ import annotations
 
@@ -29,10 +37,19 @@ class StripeMeteringClient:
     """Records agent_calls meter events to Stripe for usage-based billing."""
 
     def __init__(self, api_key: Optional[str] = None) -> None:
-        self._api_key = api_key or os.environ.get("STRIPE_SECRET_KEY", "")
+        # Check explicit arg first, then ISG_AGENT_STRIPE_SECRET_KEY (canonical for pydantic-settings),
+        # then bare STRIPE_SECRET_KEY (legacy fallback).
+        self._api_key = (
+            api_key
+            or os.environ.get("ISG_AGENT_STRIPE_SECRET_KEY", "")
+            or os.environ.get("STRIPE_SECRET_KEY", "")
+        )
         self._enabled = bool(self._api_key and self._api_key.startswith("sk_"))
         if not self._enabled:
-            logger.warning("StripeMeteringClient: STRIPE_SECRET_KEY not set — metering disabled")
+            logger.warning(
+                "StripeMeteringClient: no valid Stripe API key found — metering disabled. "
+                "Set ISG_AGENT_STRIPE_SECRET_KEY on Railway (ISG_AGENT_ prefix required)."
+            )
 
     async def record_agent_call(
         self,

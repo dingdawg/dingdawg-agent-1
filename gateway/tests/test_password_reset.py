@@ -74,6 +74,7 @@ async def registered_user(tmp_db: str) -> dict:
                 email TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 salt TEXT NOT NULL,
+                full_name TEXT,
                 created_at TEXT NOT NULL
             )
             """
@@ -245,7 +246,7 @@ class TestPasswordResetManager:
             await db.execute(
                 "CREATE TABLE IF NOT EXISTS users "
                 "(id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, "
-                "password_hash TEXT NOT NULL, salt TEXT NOT NULL, created_at TEXT NOT NULL)"
+                "password_hash TEXT NOT NULL, salt TEXT NOT NULL, full_name TEXT, created_at TEXT NOT NULL)"
             )
             await db.commit()
         result = await manager.get_user_by_email("ghost@example.com")
@@ -325,7 +326,7 @@ class TestForgotPasswordEndpoint:
             await db.execute(
                 "CREATE TABLE IF NOT EXISTS users "
                 "(id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, "
-                "password_hash TEXT NOT NULL, salt TEXT NOT NULL, created_at TEXT NOT NULL)"
+                "password_hash TEXT NOT NULL, salt TEXT NOT NULL, full_name TEXT, created_at TEXT NOT NULL)"
             )
             await db.execute(
                 "INSERT INTO users (id, email, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -428,7 +429,7 @@ class TestResetPasswordEndpoint:
             await db.execute(
                 "CREATE TABLE IF NOT EXISTS users "
                 "(id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, "
-                "password_hash TEXT NOT NULL, salt TEXT NOT NULL, created_at TEXT NOT NULL)"
+                "password_hash TEXT NOT NULL, salt TEXT NOT NULL, full_name TEXT, created_at TEXT NOT NULL)"
             )
             await db.execute(
                 "INSERT INTO users (id, email, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)",

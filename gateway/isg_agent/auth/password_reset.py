@@ -68,9 +68,16 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     token_hash  TEXT NOT NULL UNIQUE,
     expires_at  TEXT NOT NULL,
     used        INTEGER NOT NULL DEFAULT 0,
+    used_at     TEXT,
     created_at  TEXT NOT NULL
 );
 """
+
+# Idempotent migration for tables created before used_at existed —
+# schema.py's canonical DDL has this column; this DDL must match it.
+_ALTER_RESET_USED_AT = (
+    "ALTER TABLE password_reset_tokens ADD COLUMN used_at TEXT;"
+)
 
 _CREATE_RESET_INDEX = (
     "CREATE INDEX IF NOT EXISTS idx_reset_tokens_hash "
@@ -123,6 +130,10 @@ class PasswordResetManager:
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(_CREATE_RESET_TABLE)
             await db.execute(_CREATE_RESET_INDEX)
+            try:
+                await db.execute(_ALTER_RESET_USED_AT)
+            except Exception:
+                pass  # Column already exists — ignore
             await db.commit()
         logger.debug("Password reset tokens table ready")
 

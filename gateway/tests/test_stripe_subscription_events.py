@@ -253,7 +253,7 @@ class TestSubscriptionCreated:
             "metadata": {
                 "user_id": "user_idem_created",
                 "agent_id": "agent_idem_001",
-                "plan": "starter",
+                "plan": "pro",
             },
             "items": {"data": []},
         }
@@ -393,11 +393,11 @@ class TestSubscriptionUpdated:
         meter = UsageMeter(db_path=db_path)
         await meter.init_tables()
 
-        # Seed a starter subscription first
+        # Seed a free subscription first
         await meter.create_subscription(
             agent_id="agent_upd_001",
             user_id="user_upd_001",
-            plan="starter",
+            plan="free",
             stripe_customer_id="cus_upd_001",
             stripe_subscription_id="sub_upd_001",
         )
@@ -479,7 +479,7 @@ class TestSubscriptionUpdated:
         await meter.create_subscription(
             agent_id="agent_unpaid_001",
             user_id="user_unpaid_001",
-            plan="starter",
+            plan="free",
             stripe_customer_id="cus_unpaid_001",
             stripe_subscription_id="sub_unpaid_001",
         )
@@ -550,7 +550,7 @@ class TestSubscriptionUpdated:
         await meter.create_subscription(
             agent_id="agent_audit_upd",
             user_id="user_audit_upd",
-            plan="starter",
+            plan="free",
             stripe_customer_id="cus_audit_upd",
             stripe_subscription_id="sub_audit_upd",
         )

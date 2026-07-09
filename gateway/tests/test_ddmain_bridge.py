@@ -126,7 +126,7 @@ class TestRegisterBusiness:
         try:
             result = await bridge.register_business({
                 "business_id": _BIZ_ID,
-                "name": "Taco Bell Clone",
+                "name": "Taco Fiesta Cantina",
             })
             agent = await bridge._agent_registry.get_agent(result["agent_id"])
             assert agent is not None

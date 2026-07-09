@@ -90,7 +90,9 @@ class TestLocalSmoke:
         body = resp.json()
         assert body["status"] == "healthy"
         assert "version" in body
-        assert body["database"] == "connected"
+        # The inline /health handler in app.py reports database: "pass"
+        # (the richer per-check health lives at /api/v1/health).
+        assert body["database"] == "pass"
 
     async def test_platform_did_returns_200_with_context(
         self, local_client: AsyncClient
@@ -218,10 +220,19 @@ class TestLiveSmoke:
         assert resp.status_code == 200
 
     @_LIVE_MARK
-    async def test_docs_disabled_in_production(self, live_client: AsyncClient) -> None:
-        # In production ISG_AGENT_DEPLOYMENT_ENV=production → /docs is disabled (404).
+    async def test_docs_serve_curated_public_spec(self, live_client: AsyncClient) -> None:
+        # Built-in FastAPI docs are disabled everywhere; /docs now serves the
+        # curated PUBLIC docs page and /openapi.json the filtered spec
+        # (isg_agent.api.routes.public_docs). Admin/internal paths must
+        # never appear in the public spec.
         resp = await live_client.get("/docs")
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers.get("content-type", "")
+
+        spec = await live_client.get("/openapi.json")
+        assert spec.status_code == 200
+        paths = spec.json()["paths"]
+        assert not [p for p in paths if "admin" in p.lower()], "admin paths leaked"
 
     @_LIVE_MARK
     async def test_register_with_bad_data_returns_422(

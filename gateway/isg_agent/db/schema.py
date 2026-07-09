@@ -28,6 +28,7 @@ Defines all tables for the ISG Agent 1 gateway:
 - ``agent_webhooks``      — Per-agent outbound webhook subscriptions
 - ``token_revocations``  — STOA Layer 2 revocation list (TokenRevocationGuard)
 - ``comm_pair_secrets``  — Per-pair random encryption secrets for inter-agent comms
+- ``atr_receipts``       — ATR v1.0 compliance audit receipts
 
 All statements are ``CREATE TABLE IF NOT EXISTS`` so they are safe to
 execute on every startup (idempotent).
@@ -567,6 +568,22 @@ CREATE TABLE IF NOT EXISTS comm_pair_secrets (
 );
 """
 
+_ATR_RECEIPTS = """
+CREATE TABLE IF NOT EXISTS atr_receipts (
+    receipt_id          TEXT    PRIMARY KEY,
+    agent_id            TEXT    NOT NULL,
+    decision            TEXT    NOT NULL CHECK(decision IN ('APPROVE', 'DECLINE', 'REVIEW')),
+    decision_reason     TEXT    NOT NULL DEFAULT '',
+    timestamp           TEXT    NOT NULL,
+    subject_id          TEXT    NOT NULL,
+    policy_version      TEXT,
+    confidence_score    INTEGER CHECK(confidence_score >= 0 AND confidence_score <= 100),
+    parent_receipt_id   TEXT,
+    verification_endpoint TEXT,
+    created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+"""
+
 # ---------------------------------------------------------------------------
 # Zapier webhook subscriptions — stores Zapier REST Hook callback URLs
 # ---------------------------------------------------------------------------
@@ -837,6 +854,10 @@ _INDEXES: list[str] = [
 
     # comm_pair_secrets — pair_key is PRIMARY KEY (already indexed); created_at for TTL queries
     "CREATE INDEX IF NOT EXISTS idx_comm_pair_secrets_created ON comm_pair_secrets(created_at);",
+
+    # atr_receipts — receipt_id is PRIMARY KEY; agent_id for listing by agent
+    "CREATE INDEX IF NOT EXISTS idx_atr_receipts_agent ON atr_receipts(agent_id);",
+    "CREATE INDEX IF NOT EXISTS idx_atr_receipts_timestamp ON atr_receipts(timestamp);",
 ]
 
 # ---------------------------------------------------------------------------
@@ -896,6 +917,7 @@ _TABLE_STATEMENTS: list[str] = [
     # Auth recovery — password reset tokens + MFA backup codes
     _PASSWORD_RESET_TOKENS,
     _MFA_BACKUP_CODES,
+    _ATR_RECEIPTS,
 ]
 
 

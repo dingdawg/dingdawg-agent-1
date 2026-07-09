@@ -288,6 +288,17 @@ class Settings(BaseSettings):
         ),
     )
 
+    # -- ATR API Key (optional, for receipt endpoint auth) -----------------
+    atr_api_key: str = Field(
+        default="",
+        description=(
+            "Optional API key for ATR v1.0 receipt endpoints. "
+            "If set, clients must provide X-API-Key header matching this value "
+            "to create or read receipts. If empty, endpoints remain public. "
+            "Env var: ISG_AGENT_ATR_API_KEY"
+        ),
+    )
+
     # -- Deployment environment -------------------------------------------
     deployment_env: str = Field(
         default="development",
@@ -445,6 +456,166 @@ class Settings(BaseSettings):
 
 
 # ---------------------------------------------------------------------------
+# Bare-name fallback mapping
+# ---------------------------------------------------------------------------
+# Users sometimes set env vars without the ISG_AGENT_ prefix (e.g.
+# STRIPE_SECRET_KEY instead of ISG_AGENT_STRIPE_SECRET_KEY).  These are
+# silently ignored by pydantic-settings because env_prefix="ISG_AGENT_"
+# controls which env vars are read.
+#
+# Railway's dashboard makes this worse: it shows bare names as "green"
+# (set) even though the app ignores them.  The map below provides a
+# fallback — if the prefixed name is empty, we check the bare name.
+#
+# Keys are Settings field names; values are bare env var names to fall
+# back to.  A startup warning is emitted for every bare-name fallback
+# that triggers, so operators know to fix their Railway dashboard.
+_BARE_VAR_FALLBACKS: dict[str, str] = {
+    "stripe_secret_key": "STRIPE_SECRET_KEY",
+    "stripe_webhook_secret": "STRIPE_WEBHOOK_SECRET",
+    "openai_api_key": "OPENAI_API_KEY",
+    "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "google_api_key": "GOOGLE_API_KEY",
+    "inception_api_key": "INCEPTION_API_KEY",
+    "sendgrid_api_key": "SENDGRID_API_KEY",
+    "sendgrid_from_email": "SENDGRID_FROM_EMAIL",
+    "twilio_account_sid": "TWILIO_ACCOUNT_SID",
+    "twilio_auth_token": "TWILIO_AUTH_TOKEN",
+    "twilio_from_number": "TWILIO_FROM_NUMBER",
+    "vapi_api_key": "VAPI_API_KEY",
+    "google_client_id": "GOOGLE_CLIENT_ID",
+    "google_client_secret": "GOOGLE_CLIENT_SECRET",
+    "google_redirect_uri": "GOOGLE_REDIRECT_URI",
+    "secret_key": "SECRET_KEY",
+    "db_path": "DATABASE_URL",
+    "atr_api_key": "ATR_API_KEY",
+}
+
+
+def _warn_bare_env_vars() -> None:
+    """Log a warning for every bare env var that exists but is ignored.
+
+    A bare env var is one that IS set in the environment without the
+    ``ISG_AGENT_`` prefix.  pydantic-settings ignores these.  We detect
+    them here so operators can fix their Railway / hosting dashboard.
+
+    Also logs a warning if a bare name AND the prefixed name are both set,
+    since the prefixed value takes precedence (which may be unexpected).
+    """
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    prefix = "ISG_AGENT_"
+    for settings_key, bare_var in _BARE_VAR_FALLBACKS.items():
+        prefixed_var = f"{prefix}{settings_key.upper()}"
+        bare_value = os.environ.get(bare_var, "")
+        prefixed_value = os.environ.get(prefixed_var, "")
+
+        if bare_value and not prefixed_value:
+            _log.warning(
+                "ENV_PREFIX: %s is set (%d chars) but pydantic-settings "
+                "requires %s (env_prefix='ISG_AGENT_'). "
+                "Railway dashboard MUST show %s, not bare %s. "
+                "Bare names appear green in the dashboard but are "
+                "silently ignored by pydantic-settings.",
+                bare_var,
+                len(bare_value),
+                prefixed_var,
+                prefixed_var,
+                bare_var,
+            )
+
+        if prefixed_value and bare_value:
+            _log.debug(
+                "ENV_PREFIX: both %s and %s are set — %s takes precedence.",
+                prefixed_var,
+                bare_var,
+                prefixed_var,
+            )
+
+
+def _env_var_diagnostics() -> dict[str, Any]:
+    """Return diagnostic info about env var prefix mapping.
+
+    Returns a dict with two keys:
+    - ``prefixed_set``: list of ISG_AGENT_ prefixed env vars that are set
+    - ``bare_ignored``: list of bare env vars that exist but are NOT being
+      read by pydantic-settings (because the ISG_AGENT_ prefixed equivalent
+      IS NOT set — so we fall back)
+    - ``bare_fallback_active``: list of bare env vars that ARE being used
+      as fallbacks (because the ISG_AGENT_ prefixed equivalent is not set)
+    - ``mapped``: dict of settings field name → final value source
+
+    This is safe to call at any time (no side effects) and is wired into
+    the system health endpoint for remote verification.
+    """
+    prefix = "ISG_AGENT_"
+    prefixed_set: list[str] = []
+    bare_ignored: list[str] = []
+    bare_fallback_active: list[str] = []
+    mapped: dict[str, str] = {}
+
+    for settings_key, bare_var in _BARE_VAR_FALLBACKS.items():
+        prefixed_var = f"{prefix}{settings_key.upper()}"
+        bare_value = os.environ.get(bare_var, "")
+        prefixed_value = os.environ.get(prefixed_var, "")
+
+        if prefixed_value:
+            prefixed_set.append(prefixed_var)
+            mapped[settings_key] = prefixed_var
+        elif bare_value:
+            bare_fallback_active.append(bare_var)
+            mapped[settings_key] = f"{bare_var} (FALLBACK — rename to {prefixed_var})"
+        else:
+            mapped[settings_key] = "(not set)"
+
+    # Detect bare env vars that exist but are silently ignored by pydantic-settings.
+    #
+    # A bare var is "ignored" when:
+    #   a) It is one of the env vars we explicitly track in _BARE_VAR_FALLBACKS, AND
+    #   b) The ISG_AGENT_ prefixed equivalent is NOT set (so the bare name would be
+    #      needed but pydantic-settings won't read it), AND
+    #   c) It is NOT already in bare_fallback_active (meaning it IS empty/unset).
+    #
+    # This catches the dangerous case where an operator set the bare name in
+    # Railway dashboard but left the prefixed name empty.  The bare name shows
+    # green in the Railway UI but pydantic-settings silently ignores it.
+    #
+    # Also catch bare vars that exist but have NO mapping in _BARE_VAR_FALLBACKS
+    # at all — these are also silently ignored and may indicate environment drift.
+    _fallback_values = {v.upper() for v in _BARE_VAR_FALLBACKS.values()}
+    for bare_var, bare_value in sorted(os.environ.items()):
+        bare_upper = bare_var.upper().strip()
+        if not bare_value:
+            continue
+
+        # Determine the ISG_AGENT_ prefixed equivalent for this bare var.
+        prefixed_candidate = f"{prefix}{bare_upper}"
+        prefixed_value = os.environ.get(prefixed_candidate, "")
+
+        if bare_upper in _fallback_values:
+            # This bare var has a known fallback mapping.
+            # It should be in bare_fallback_active if it was used as a fallback.
+            # It's "ignored" if the prefixed version is ALSO set (because prefixed
+            # takes precedence, making the bare name redundant but confusing).
+            if prefixed_value and bare_value:
+                bare_ignored.append(bare_var)
+        else:
+            # This bare var has NO mapping in _BARE_VAR_FALLBACKS.
+            # It is silently ignored by pydantic-settings regardless.
+            # If no prefixed equivalent exists either, note it as ignored.
+            if not prefixed_value:
+                bare_ignored.append(bare_var)
+
+    return {
+        "prefixed_set": sorted(prefixed_set),
+        "bare_ignored": sorted(bare_ignored),
+        "bare_fallback_active": sorted(bare_fallback_active),
+        "mapped": dict(sorted(mapped.items())),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Cached singleton accessor
 # ---------------------------------------------------------------------------
 
@@ -467,9 +638,30 @@ def get_settings() -> Settings:
             settings_key = key[len(dingdawg_prefix):].lower()
             env_overrides[settings_key] = value
 
+    # ---- Bare-name fallback: if a prefixed var is not set but a bare -----
+    # env var exists, inject it as an override so settings still work.
+    # This is a safety net for operators who set STRIPE_SECRET_KEY (bare)
+    # instead of ISG_AGENT_STRIPE_SECRET_KEY (prefixed) in their Railway
+    # dashboard.  We also warn so they can fix the naming.
+    isg_prefix = "ISG_AGENT_"
+    for settings_key, bare_var in _BARE_VAR_FALLBACKS.items():
+        prefixed_var = f"{isg_prefix}{settings_key.upper()}"
+        bare_value = os.environ.get(bare_var, "")
+        prefixed_value = os.environ.get(prefixed_var, "")
+
+        if bare_value and not prefixed_value:
+            # Bare name exists but prefixed doesn't — use bare as fallback.
+            # This ensures the app works even when Railway dashboard has the
+            # wrong (bare) name.  A warning is logged so operators fix it.
+            env_overrides[settings_key] = bare_value
+
+    # Warn about bare-name mismatches (log-level: WARNING).
+    _warn_bare_env_vars()
+
     # Merge: yaml_data is the base, env_overrides layer on top.
     # Pydantic-settings handles ISG_AGENT_ prefixed env vars automatically.
-    # For DINGDAWG_ prefixed vars, we inject them as initial data.
+    # For DINGDAWG_ prefixed vars and bare-name fallbacks, we inject them
+    # as initial data.
     init_data: dict[str, Any] = {}
     init_data.update(yaml_data)
     init_data.update(env_overrides)

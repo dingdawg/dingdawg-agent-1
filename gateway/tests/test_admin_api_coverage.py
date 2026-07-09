@@ -75,10 +75,18 @@ async def ctx(tmp_path) -> AsyncIterator[ClientCtx]:
     _prev_db = os.environ.get("ISG_AGENT_DB_PATH")
     _prev_secret = os.environ.get("ISG_AGENT_SECRET_KEY")
     _prev_admin = os.environ.get("ISG_AGENT_ADMIN_EMAIL")
+    # The app captures settings at lifespan boot, and get_settings() falls
+    # back to bare env names (Railway bare-name safety net).  Boot the test
+    # app with BOTH Stripe names absent so "no key configured" tests see a
+    # clean state regardless of the developer machine's environment.
+    _prev_stripe = os.environ.get("ISG_AGENT_STRIPE_SECRET_KEY")
+    _prev_stripe_bare = os.environ.get("STRIPE_SECRET_KEY")
 
     os.environ["ISG_AGENT_DB_PATH"] = db_file
     os.environ["ISG_AGENT_SECRET_KEY"] = _SECRET
     os.environ["ISG_AGENT_ADMIN_EMAIL"] = _ADMIN_EMAIL
+    os.environ.pop("ISG_AGENT_STRIPE_SECRET_KEY", None)
+    os.environ.pop("STRIPE_SECRET_KEY", None)
     get_settings.cache_clear()
 
     try:
@@ -113,6 +121,16 @@ async def ctx(tmp_path) -> AsyncIterator[ClientCtx]:
             os.environ.pop("ISG_AGENT_ADMIN_EMAIL", None)
         else:
             os.environ["ISG_AGENT_ADMIN_EMAIL"] = _prev_admin
+
+        if _prev_stripe is None:
+            os.environ.pop("ISG_AGENT_STRIPE_SECRET_KEY", None)
+        else:
+            os.environ["ISG_AGENT_STRIPE_SECRET_KEY"] = _prev_stripe
+
+        if _prev_stripe_bare is None:
+            os.environ.pop("STRIPE_SECRET_KEY", None)
+        else:
+            os.environ["STRIPE_SECRET_KEY"] = _prev_stripe_bare
 
         get_settings.cache_clear()
 
@@ -416,8 +434,13 @@ class TestPriorities:
         """With no Stripe key configured, a revenue/critical priority must appear."""
         # The test fixture does NOT set ISG_AGENT_STRIPE_SECRET_KEY, so the
         # endpoint should detect a missing/empty Stripe key.
+        # NOTE: get_settings() falls back to the bare STRIPE_SECRET_KEY env
+        # var (Railway bare-name safety net), so BOTH names must be absent
+        # to simulate "no key configured".
         prev = os.environ.get("ISG_AGENT_STRIPE_SECRET_KEY")
+        prev_bare = os.environ.get("STRIPE_SECRET_KEY")
         os.environ.pop("ISG_AGENT_STRIPE_SECRET_KEY", None)
+        os.environ.pop("STRIPE_SECRET_KEY", None)
         get_settings.cache_clear()
         try:
             resp = await ctx.ac.get(
@@ -437,12 +460,19 @@ class TestPriorities:
                 os.environ.pop("ISG_AGENT_STRIPE_SECRET_KEY", None)
             else:
                 os.environ["ISG_AGENT_STRIPE_SECRET_KEY"] = prev
+            if prev_bare is None:
+                os.environ.pop("STRIPE_SECRET_KEY", None)
+            else:
+                os.environ["STRIPE_SECRET_KEY"] = prev_bare
             get_settings.cache_clear()
 
     async def test_system_health_critical_when_stripe_missing(self, ctx: ClientCtx) -> None:
         """system_health must be 'critical' when Stripe key is absent."""
+        # Pop BOTH names — get_settings() falls back to bare STRIPE_SECRET_KEY.
         prev = os.environ.get("ISG_AGENT_STRIPE_SECRET_KEY")
+        prev_bare = os.environ.get("STRIPE_SECRET_KEY")
         os.environ.pop("ISG_AGENT_STRIPE_SECRET_KEY", None)
+        os.environ.pop("STRIPE_SECRET_KEY", None)
         get_settings.cache_clear()
         try:
             resp = await ctx.ac.get(
@@ -459,6 +489,10 @@ class TestPriorities:
                 os.environ.pop("ISG_AGENT_STRIPE_SECRET_KEY", None)
             else:
                 os.environ["ISG_AGENT_STRIPE_SECRET_KEY"] = prev
+            if prev_bare is None:
+                os.environ.pop("STRIPE_SECRET_KEY", None)
+            else:
+                os.environ["STRIPE_SECRET_KEY"] = prev_bare
             get_settings.cache_clear()
 
     async def test_stripe_test_key_produces_revenue_priority(self, ctx: ClientCtx) -> None:

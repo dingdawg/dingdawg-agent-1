@@ -505,7 +505,7 @@ class TestTierCapabilities:
     """Tests for tier-based capability defaults."""
 
     def test_basic_tier(self) -> None:
-        caps = get_tier_capabilities("basic")
+        caps = get_tier_capabilities("free")
         assert CapabilitySet.READ_CONTEXT in caps
         assert CapabilitySet.WRITE_OUTPUT in caps
         assert CapabilitySet.HTTP_OUTBOUND not in caps

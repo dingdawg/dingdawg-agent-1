@@ -476,6 +476,62 @@ async def delete_agent_admin(
 
 
 # ---------------------------------------------------------------------------
+# DELETE /admin/users/{user_id}
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_200_OK)
+async def delete_user_admin(
+    user_id: str,
+    request: Request,
+    admin: CurrentUser = Depends(require_admin),
+) -> dict[str, Any]:
+    """Hard-delete a user and all related rows (QA cleanup, orphan removal)."""
+    db = _db_path(request)
+    try:
+        async with aiosqlite.connect(db) as conn:
+            row = await conn.execute_fetchall(
+                "SELECT id, email FROM users WHERE id = ?", (user_id,)
+            )
+            if not row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"User '{user_id}' not found.",
+                )
+            _uid = (user_id,)
+            for sql in (
+                "DELETE FROM sessions WHERE user_id = ?",
+                "DELETE FROM usage_subscriptions WHERE user_id = ?",
+                "DELETE FROM agent_sessions WHERE user_id = ?",
+                "DELETE FROM user_allowlist WHERE user_id = ?",
+                "DELETE FROM skill_game_sessions WHERE user_id = ?",
+                "DELETE FROM zapier_webhook_subscriptions WHERE user_id = ?",
+            ):
+                try:
+                    await conn.execute(sql, _uid)
+                except Exception as tbl_exc:
+                    logger.debug("delete_user: related-row cleanup skipped: %s", tbl_exc)
+            await conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            await conn.commit()
+            logger.info(
+                "admin delete_user: user_id=%s email=%s deleted by admin=%s",
+                user_id,
+                row[0][1],
+                admin.user_id,
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("admin delete_user failed for %s: %s", user_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database error while deleting user.",
+        ) from exc
+
+    return {"deleted": True, "user_id": user_id}
+
+
+# ---------------------------------------------------------------------------
 # GET /admin/agents/template-distribution
 # ---------------------------------------------------------------------------
 

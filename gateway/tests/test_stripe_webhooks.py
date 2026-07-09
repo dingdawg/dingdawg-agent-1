@@ -300,12 +300,12 @@ class TestCheckoutSessionCompletedEdgeCases:
 
     @pytest.mark.asyncio
     async def test_checkout_completed_all_three_paid_plans(self, tmp_path):
-        """checkout.session.completed correctly records starter, pro, and enterprise plans."""
+        """checkout.session.completed correctly records team, pro, and enterprise plans."""
         db_path = str(tmp_path / "plans.db")
         meter = UsageMeter(db_path=db_path)
         await meter.init_tables()
 
-        for plan in ("starter", "pro", "enterprise"):
+        for plan in ("pro", "team", "enterprise"):
             mock_client = _make_stripe_client()
             mock_gate = PaymentGate(stripe_client=None)
 
@@ -376,7 +376,7 @@ class TestCheckoutSessionCompletedEdgeCases:
             "metadata": {
                 "user_id": "user_idem",
                 "agent_id": "agent_idem",
-                "plan": "starter",
+                "plan": "pro",
             },
         }
         mock_client.verify_webhook.return_value = _webhook_event(
@@ -412,7 +412,7 @@ class TestCheckoutSessionCompletedEdgeCases:
             agent_id="agent_idem", user_id="user_idem"
         )
         assert sub is not None
-        assert sub["plan"] == "starter"
+        assert sub["plan"] == "pro"
 
         # Verify uniqueness at DB level
         import aiosqlite

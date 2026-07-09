@@ -176,7 +176,9 @@ class TestSecurityHeadersPresence:
     async def test_permissions_policy(self, test_app: FastAPI) -> None:
         async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as c:
             r = await c.get("/test")
-        assert r.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=(), payment=(self)"
+        # microphone=(self) is deliberate — the voice system (STT / owner
+        # console) needs same-origin microphone access.
+        assert r.headers["permissions-policy"] == "camera=(), microphone=(self), geolocation=(), payment=(self)"
 
     @pytest.mark.asyncio
     async def test_content_security_policy(self, test_app: FastAPI) -> None:

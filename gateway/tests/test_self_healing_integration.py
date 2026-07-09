@@ -196,11 +196,21 @@ async def ctx(tmp_path) -> AsyncIterator[ClientCtx]:
     _prev_secret = os.environ.get("ISG_AGENT_SECRET_KEY")
     _prev_admin = os.environ.get("ISG_AGENT_ADMIN_EMAIL")
     _prev_stripe = os.environ.get("ISG_AGENT_STRIPE_SECRET_KEY")
+    # get_settings() falls back to bare env names (Railway bare-name safety
+    # net).  Boot the test app with bare LLM provider keys absent so the
+    # "no LLM keys configured" self-test assertions hold regardless of the
+    # developer machine's environment.
+    _prev_bare_llm = {
+        var: os.environ.get(var)
+        for var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY", "INCEPTION_API_KEY")
+    }
 
     os.environ["ISG_AGENT_DB_PATH"] = db_file
     os.environ["ISG_AGENT_SECRET_KEY"] = _SECRET
     os.environ["ISG_AGENT_ADMIN_EMAIL"] = _ADMIN_EMAIL
     os.environ["ISG_AGENT_STRIPE_SECRET_KEY"] = "sk_test_shi_http_fixture"
+    for _var in _prev_bare_llm:
+        os.environ.pop(_var, None)
     get_settings.cache_clear()
 
     try:
@@ -217,6 +227,7 @@ async def ctx(tmp_path) -> AsyncIterator[ClientCtx]:
             "ISG_AGENT_SECRET_KEY": _prev_secret,
             "ISG_AGENT_ADMIN_EMAIL": _prev_admin,
             "ISG_AGENT_STRIPE_SECRET_KEY": _prev_stripe,
+            **_prev_bare_llm,
         }
         for var, val in _restore.items():
             if val is None:
@@ -808,11 +819,15 @@ async def test_self_test_stripe_missing_is_fail(tmp_path) -> None:
     _prev_secret = os.environ.get("ISG_AGENT_SECRET_KEY")
     _prev_admin = os.environ.get("ISG_AGENT_ADMIN_EMAIL")
     _prev_stripe = os.environ.get("ISG_AGENT_STRIPE_SECRET_KEY")
+    # get_settings() falls back to the bare STRIPE_SECRET_KEY env var
+    # (Railway bare-name safety net) — pop BOTH names to simulate absence.
+    _prev_stripe_bare = os.environ.get("STRIPE_SECRET_KEY")
 
     os.environ["ISG_AGENT_DB_PATH"] = db_file
     os.environ["ISG_AGENT_SECRET_KEY"] = _SECRET
     os.environ["ISG_AGENT_ADMIN_EMAIL"] = _ADMIN_EMAIL
     os.environ.pop("ISG_AGENT_STRIPE_SECRET_KEY", None)
+    os.environ.pop("STRIPE_SECRET_KEY", None)
     get_settings.cache_clear()
 
     try:
@@ -842,6 +857,7 @@ async def test_self_test_stripe_missing_is_fail(tmp_path) -> None:
             "ISG_AGENT_SECRET_KEY": _prev_secret,
             "ISG_AGENT_ADMIN_EMAIL": _prev_admin,
             "ISG_AGENT_STRIPE_SECRET_KEY": _prev_stripe,
+            "STRIPE_SECRET_KEY": _prev_stripe_bare,
         }
         for var, val in _restore.items():
             if val is None:

@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS users (
     created_at  TEXT    NOT NULL,
     totp_secret TEXT    DEFAULT NULL,
     email_verified INTEGER NOT NULL DEFAULT 0,
-    mfa_enabled INTEGER NOT NULL DEFAULT 0
+    mfa_enabled INTEGER NOT NULL DEFAULT 0,
+    full_name   TEXT    DEFAULT NULL
 );
 """
 
@@ -58,6 +59,9 @@ _ALTER_USERS_TOTP = (
 )
 _ALTER_USERS_MFA_ENABLED = (
     "ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0;"
+)
+_ALTER_USERS_FULL_NAME = (
+    "ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT NULL;"
 )
 
 # ---------------------------------------------------------------------------
@@ -203,10 +207,27 @@ async def _clear_login_failures(email: str, db_path: str = "") -> None:
 # ---------------------------------------------------------------------------
 
 
+def _check_password_complexity(v: str) -> str:
+    """Shared password policy — register and reset MUST enforce the same rules."""
+    import re
+    missing: list[str] = []
+    if len(v) < 8:
+        missing.append("at least 8 characters")
+    if not re.search(r"[A-Z]", v):
+        missing.append("at least 1 uppercase letter")
+    if not re.search(r"[0-9]", v):
+        missing.append("at least 1 digit")
+    if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?`~]", v):
+        missing.append("at least 1 special character (!@#$%^&* etc.)")
+    if missing:
+        raise ValueError("Password must contain: " + ", ".join(missing))
+    return v
+
+
 class RegisterRequest(BaseModel):
     """Request body for user registration."""
 
-    email: str
+    email: EmailStr
     password: str
     # Honeypot field — must be empty for real users.
     # Bots auto-fill everything; real users never see this (CSS hidden).
@@ -224,19 +245,7 @@ class RegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def _password_complexity(cls, v: str) -> str:
-        import re
-        missing: list[str] = []
-        if len(v) < 8:
-            missing.append("at least 8 characters")
-        if not re.search(r"[A-Z]", v):
-            missing.append("at least 1 uppercase letter")
-        if not re.search(r"[0-9]", v):
-            missing.append("at least 1 digit")
-        if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?`~]", v):
-            missing.append("at least 1 special character (!@#$%^&* etc.)")
-        if missing:
-            raise ValueError("Password must contain: " + ", ".join(missing))
-        return v
+        return _check_password_complexity(v)
 
     @field_validator("email")
     @classmethod
@@ -531,6 +540,10 @@ async def _ensure_users_table(db_path: str, is_memory: bool) -> None:
             pass  # Column already exists — ignore
         try:
             await db.execute(_ALTER_USERS_MFA_ENABLED)
+        except Exception:
+            pass  # Column already exists — ignore
+        try:
+            await db.execute(_ALTER_USERS_FULL_NAME)
         except Exception:
             pass  # Column already exists — ignore
         await db.commit()
@@ -1445,6 +1458,11 @@ class PasswordResetRequest(BaseModel):
     token: str
     new_password: str
 
+    @field_validator("new_password")
+    @classmethod
+    def _password_complexity(cls, v: str) -> str:
+        return _check_password_complexity(v)
+
 
 @router.post("/reset-password", summary="Complete password reset", status_code=200)
 async def reset_password(
@@ -1454,11 +1472,11 @@ async def reset_password(
     """Validate a reset token and update the user's password."""
     import hashlib
 
-    if len(body.new_password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Password must be at least 8 characters.",
-        )
+    from isg_agent.auth.password_reset import PasswordResetManager
+
+    # Fresh-DB safety: the SELECT below 500s if the table has never been
+    # created (e.g. reset attempted before any forgot-password call).
+    await PasswordResetManager(db_path=db_path).init_tables()
 
     now = datetime.now(timezone.utc)
     token_hash = hashlib.sha256(body.token.encode()).hexdigest()

@@ -35,6 +35,7 @@ PRICING_TIERS: dict[str, dict[str, Any]] = {
         "price_cents_monthly": 0,
         "price_cents_annual": 0,
         "calls_per_day": 25,
+        "actions_included": 750,       # monthly quota = 25/day x 30
         "overage_cents": 0,
         "overage_blocked": True,
     },
@@ -43,6 +44,7 @@ PRICING_TIERS: dict[str, dict[str, Any]] = {
         "price_cents_monthly": 4900,   # $49/mo
         "price_cents_annual": 3900,    # $39/mo billed annually ($468/yr)
         "calls_per_day": 100,
+        "actions_included": 3000,      # monthly quota = 100/day x 30
         "overage_cents": 10,           # $0.10/call
         "overage_blocked": False,
     },
@@ -51,6 +53,7 @@ PRICING_TIERS: dict[str, dict[str, Any]] = {
         "price_cents_monthly": 14900,  # $149/mo
         "price_cents_annual": 11900,   # $119/mo billed annually ($1,428/yr)
         "calls_per_day": 300,
+        "actions_included": 9000,      # monthly quota = 300/day x 30
         "seats": 5,
         "overage_cents": 10,
         "overage_blocked": False,
@@ -60,6 +63,7 @@ PRICING_TIERS: dict[str, dict[str, Any]] = {
         "price_cents_monthly": 49900,  # $499/mo
         "price_cents_annual": 39900,   # $399/mo billed annually ($4,788/yr)
         "calls_per_day": 1000,
+        "actions_included": 30000,     # monthly quota = 1000/day x 30
         "seats": 10,
         "overage_cents": 10,
         "overage_blocked": False,
@@ -68,7 +72,8 @@ PRICING_TIERS: dict[str, dict[str, Any]] = {
         "name": "Pay As You Go",
         "price_cents_monthly": 0,
         "price_cents_annual": 0,
-        "calls_per_day": -1,           # Unlimited
+        "calls_per_day": -1,           # Unlimited count — every call is metered
+        "actions_included": 0,         # no free quota: each call bills at overage_cents
         "overage_cents": 25,           # $0.25/call
         "overage_blocked": False,
     },

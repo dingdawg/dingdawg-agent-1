@@ -36,11 +36,20 @@ class StripeConnectClient:
         api_key: Optional[str] = None,
         public_url: str = "https://dingdawg.com",
     ) -> None:
-        self._api_key = api_key or os.environ.get("STRIPE_SECRET_KEY", "")
+        # Check explicit arg first, then ISG_AGENT_STRIPE_SECRET_KEY (canonical for pydantic-settings),
+        # then bare STRIPE_SECRET_KEY (legacy fallback).
+        self._api_key = (
+            api_key
+            or os.environ.get("ISG_AGENT_STRIPE_SECRET_KEY", "")
+            or os.environ.get("STRIPE_SECRET_KEY", "")
+        )
         self._enabled = bool(self._api_key and self._api_key.startswith("sk_"))
         self._public_url = public_url.rstrip("/")
         if not self._enabled:
-            logger.warning("StripeConnectClient: STRIPE_SECRET_KEY not set — Connect disabled")
+            logger.warning(
+                "StripeConnectClient: no valid Stripe API key found — Connect disabled. "
+                "Set ISG_AGENT_STRIPE_SECRET_KEY on Railway (ISG_AGENT_ prefix required)."
+            )
 
     def _set_key(self) -> None:
         stripe.api_key = self._api_key

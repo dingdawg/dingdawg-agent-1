@@ -309,7 +309,7 @@ class TestTierCapabilityMapping:
 
     def test_basic_tier_capabilities(self) -> None:
         """Basic tier: READ_CONTEXT + WRITE_OUTPUT, no HTTP or filesystem."""
-        caps = get_tier_capabilities("basic")
+        caps = get_tier_capabilities("free")
         assert CapabilitySet.READ_CONTEXT in caps
         assert CapabilitySet.WRITE_OUTPUT in caps
         assert CapabilitySet.HTTP_OUTBOUND not in caps

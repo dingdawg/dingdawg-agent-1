@@ -29,28 +29,30 @@ class TestPricingTiers:
     def test_free_tier_exists(self):
         assert "free" in PRICING_TIERS
         assert PRICING_TIERS["free"]["price_cents_monthly"] == 0
-        assert PRICING_TIERS["free"]["actions_included"] == 50
+        assert PRICING_TIERS["free"]["actions_included"] == 750  # 25/day x 30
         assert PRICING_TIERS["free"]["overage_blocked"] is True
 
-    def test_starter_tier(self):
-        tier = PRICING_TIERS["starter"]
-        assert tier["price_cents_monthly"] == 4999  # $49.99/mo
-        assert tier["actions_included"] == 500
-        assert tier["overage_cents"] == 100  # $1.00/action
+    def test_team_tier(self):
+        tier = PRICING_TIERS["team"]
+        assert tier["price_cents_monthly"] == 14900  # $149/mo
+        assert tier["actions_included"] == 9000  # 300/day x 30
+        assert tier["seats"] == 5
+        assert tier["overage_cents"] == 10  # $0.10/action
         assert tier["overage_blocked"] is False
 
     def test_pro_tier(self):
         tier = PRICING_TIERS["pro"]
-        assert tier["price_cents_monthly"] == 7999  # $79.99/mo
-        assert tier["actions_included"] == 2000
-        assert tier["overage_cents"] == 100  # $1.00/action
+        assert tier["price_cents_monthly"] == 4900  # $49/mo
+        assert tier["actions_included"] == 3000  # 100/day x 30
+        assert tier["overage_cents"] == 10  # $0.10/action
         assert tier["overage_blocked"] is False
 
     def test_enterprise_tier(self):
         tier = PRICING_TIERS["enterprise"]
         assert tier["price_cents_monthly"] == 49900  # $499/mo
-        assert tier["actions_included"] == -1  # Unlimited
-        assert tier["overage_cents"] == 100  # $1.00/action
+        assert tier["actions_included"] == 30000  # 1000/day x 30 (not unlimited)
+        assert tier["seats"] == 10
+        assert tier["overage_cents"] == 10  # $0.10/action
         assert tier["overage_blocked"] is False
 
     def test_all_tiers_have_required_keys(self):
@@ -217,12 +219,12 @@ class TestSubscriptions:
         sub = await meter.create_subscription(
             agent_id="agent_1",
             user_id="user_1",
-            plan="starter",
+            plan="team",
         )
 
-        assert sub["plan"] == "starter"
-        assert sub["actions_included"] == 500
-        assert sub["price_cents_monthly"] == 4999  # $49.99/mo
+        assert sub["plan"] == "team"
+        assert sub["actions_included"] == 9000  # 300/day x 30
+        assert sub["price_cents_monthly"] == 14900  # $149/mo
         assert sub["is_active"] is True
 
     @pytest.mark.asyncio
@@ -235,23 +237,23 @@ class TestSubscriptions:
             await meter.create_subscription("agent_1", "user_1", "ultra_mega")
 
     @pytest.mark.asyncio
-    async def test_starter_plan_overage(self, tmp_path):
+    async def test_team_plan_overage(self, tmp_path):
         db_path = str(tmp_path / "test_overage.db")
         meter = UsageMeter(db_path=db_path, free_tier_limit=50)
         await meter.init_tables()
 
-        # Create starter subscription with 500 included
-        await meter.create_subscription("agent_1", "user_1", "starter")
+        # Create team subscription with 9000 included (300/day x 30)
+        await meter.create_subscription("agent_1", "user_1", "team")
 
-        # Use up all 500 included actions
-        for _ in range(500):
+        # Use up all 9000 included actions
+        for _ in range(9000):
             result = await meter.record_usage("agent_1", "user_1", "skill", "act")
             assert result["status"] == "free_tier"
 
-        # 501st action should be billed at overage rate ($1.00 = 100 cents)
+        # 9001st action should be billed at team overage rate ($0.10 = 10 cents)
         result = await meter.record_usage("agent_1", "user_1", "skill", "act")
         assert result["status"] == "recorded"
-        assert result["amount_cents"] == 100  # $1.00 overage
+        assert result["amount_cents"] == 10  # $0.10 overage
         assert result["remaining_free"] == 0
 
     @pytest.mark.asyncio
@@ -262,29 +264,30 @@ class TestSubscriptions:
 
         await meter.create_subscription("agent_1", "user_1", "pro")
 
-        # Burn through 2000 included actions
-        for _ in range(2000):
+        # Burn through 3000 included actions (100/day x 30)
+        for _ in range(3000):
             await meter.record_usage("agent_1", "user_1", "skill", "act")
 
-        # Overage at $1.00
+        # Overage at $0.10
         result = await meter.record_usage("agent_1", "user_1", "skill", "act")
         assert result["status"] == "recorded"
-        assert result["amount_cents"] == 100  # $1.00 overage
+        assert result["amount_cents"] == 10  # $0.10 overage
 
     @pytest.mark.asyncio
-    async def test_enterprise_unlimited(self, tmp_path):
+    async def test_enterprise_high_quota(self, tmp_path):
         db_path = str(tmp_path / "test_enterprise.db")
         meter = UsageMeter(db_path=db_path)
         await meter.init_tables()
 
         await meter.create_subscription("agent_1", "user_1", "enterprise")
 
-        # Even after many actions, still free_tier (unlimited)
-        for _ in range(100):
+        # Enterprise has a high (30,000/mo) but finite quota -- not unlimited.
+        # Only the "payg" tier has calls_per_day == -1 (the true unlimited/metered path).
+        for i in range(100):
             result = await meter.record_usage("agent_1", "user_1", "skill", "act")
             assert result["status"] == "free_tier"
             assert result["amount_cents"] == 0
-            assert result["remaining_free"] == -1
+            assert result["remaining_free"] == 30000 - i - 1
 
     @pytest.mark.asyncio
     async def test_get_user_subscription(self, tmp_path):
@@ -361,21 +364,21 @@ class TestUsageSummary:
         meter = UsageMeter(db_path=db_path)
         await meter.init_tables()
 
-        # Subscribe to starter (500 included, $1.00 overage)
-        await meter.create_subscription("agent_1", "user_1", "starter")
+        # Subscribe to pro (3000 included, $0.10 overage)
+        await meter.create_subscription("agent_1", "user_1", "pro")
 
-        # Use up 500 + 2 overage
-        for _ in range(500):
+        # Use up 3000 + 2 overage
+        for _ in range(3000):
             await meter.record_usage("agent_1", "user_1", "skill", "act")
 
         await meter.record_usage("agent_1", "user_1", "skill", "act")
         await meter.record_usage("agent_1", "user_1", "skill", "act")
 
         summary = await meter.get_usage_summary("agent_1")
-        assert summary["total_actions"] == 502
-        assert summary["free_actions"] == 500
+        assert summary["total_actions"] == 3002
+        assert summary["free_actions"] == 3000
         assert summary["billed_actions"] == 2
-        assert summary["total_amount_cents"] == 200  # 2 * 100 cents ($1.00 each)
+        assert summary["total_amount_cents"] == 20  # 2 * 10 cents ($0.10 each)
 
     @pytest.mark.asyncio
     async def test_usage_history(self, tmp_path):
@@ -672,7 +675,7 @@ class TestSubscribeApiRoute:
             assert resp.status_code == 201
             data = resp.json()
             assert data["plan"] == "free"
-            assert data["actions_included"] == 50
+            assert data["actions_included"] == 750  # 25/day x 30
             assert data["price_cents_monthly"] == 0
             assert data["is_active"] is True
 
@@ -687,7 +690,7 @@ class TestSubscribeApiRoute:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            for paid_plan in ("starter", "pro", "enterprise"):
+            for paid_plan in ("pro", "team", "enterprise"):
                 resp = await client.post(
                     "/api/v1/payments/subscribe",
                     json={"agent_id": "agent_1", "plan": paid_plan},

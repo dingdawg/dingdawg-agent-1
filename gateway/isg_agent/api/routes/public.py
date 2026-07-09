@@ -11,6 +11,8 @@ from __future__ import annotations
 import io
 import json
 import logging
+import uuid
+from datetime import datetime, timezone
 from html import escape
 from typing import Any, Optional
 
@@ -22,9 +24,121 @@ from isg_agent.middleware.rate_limiter_middleware import public_rate_limit
 
 __all__ = ["router"]
 
+# ---------------------------------------------------------------------------
+# ATR v1.0 — Agent Threat Response receipt data
+# ---------------------------------------------------------------------------
+
+ATR_VERSION = "1.0.0"
+
+SAMPLE_RECEIPT: dict[str, object] = {
+    "receipt_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "agent_id": "@compliance-bot",
+    "decision": "DECLINE",
+    "decision_reason": "Transaction exceeds single-payment threshold (USD 9,500 of USD 10,000 limit)",
+    "timestamp": "2026-05-28T14:30:00Z",
+    "subject_id": "a3f2b8c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
+    "policy_version": "1.4.2",
+    "confidence_score": 94,
+    "parent_receipt_id": None,
+    "verification_endpoint": "/api/v1/public/receipt/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+}
+
+RECEIPT_SCHEMA: dict[str, object] = {
+    "title": "ATR v1.0 Receipt",
+    "version": ATR_VERSION,
+    "type": "object",
+    "required": ["receipt_id", "agent_id", "decision", "timestamp", "subject_id"],
+    "properties": {
+        "receipt_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique receipt identifier (UUIDv4)",
+        },
+        "agent_id": {
+            "type": "string",
+            "description": "Issuing agent identifier (dingdawg handle or DID)",
+        },
+        "decision": {
+            "type": "string",
+            "enum": ["APPROVE", "DECLINE", "REVIEW"],
+            "description": "The agent's decision",
+        },
+        "decision_reason": {
+            "type": "string",
+            "description": "Human-readable policy rule that fired",
+        },
+        "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 UTC timestamp of the decision",
+        },
+        "subject_id": {
+            "type": "string",
+            "description": "SHA-256 hash of the subject identifier (PII-safe)",
+        },
+        "policy_version": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$",
+            "description": "Semantic version of the policy that governed this decision",
+        },
+        "confidence_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Agent's confidence in the decision (0-100)",
+        },
+        "parent_receipt_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Chain-of-custody link to parent receipt (null if root)",
+        },
+        "verification_endpoint": {
+            "type": "string",
+            "format": "uri",
+            "description": "Self-referential URL for verifying this receipt",
+        },
+    },
+}
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/public", tags=["public"])
+
+
+# ---------------------------------------------------------------------------
+# ATR auth helper
+# ---------------------------------------------------------------------------
+
+
+def _verify_atr_api_key(request: Request) -> bool:
+    """Check X-API-Key header against configured ATR API key.
+
+    If no key is configured (empty string), auth is skipped and all
+    requests are allowed. This supports local development where no
+    API key is set.
+    """
+    settings = getattr(request.app.state, "settings", None)
+    if settings is None:
+        # Lifespan not run (e.g. bare test client) — fall back to the
+        # cached settings singleton instead of failing closed on a
+        # wiring detail.
+        from isg_agent.config import get_settings
+
+        settings = get_settings()
+    if not settings.atr_api_key:
+        return True  # No key configured = open access
+    header_key = request.headers.get("x-api-key", "")
+    return header_key == settings.atr_api_key
+
+
+def _resolve_db_path(request: Request) -> str:
+    """Return the configured SQLite path (app.state first, then settings)."""
+    settings = getattr(request.app.state, "settings", None)
+    if settings is None:
+        from isg_agent.config import get_settings
+
+        settings = get_settings()
+    return str(settings.db_path or "")
 
 
 # ---------------------------------------------------------------------------
@@ -634,5 +748,213 @@ async def agent_well_known(request: Request, handle: str) -> JSONResponse:
         headers={
             "Access-Control-Allow-Origin": "*",
             "Cache-Control": "public, max-age=3600",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# ATR v1.0 — Receipt endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/receipt/sample")
+@public_rate_limit()
+async def receipt_sample(request: Request) -> JSONResponse:
+    """Return a static sample ATR v1.0 receipt.
+
+    Demonstrates the receipt schema for fintech compliance outreach.
+    Used as a sales artifact — regulators and bank partners can inspect
+    the format before integration.
+
+    Returns
+    -------
+    JSONResponse
+        A static sample receipt conforming to the ATR v1.0 schema.
+    """
+    return JSONResponse(
+        content=SAMPLE_RECEIPT,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=3600",
+        },
+    )
+
+
+@router.get("/receipt/schema")
+@public_rate_limit()
+async def receipt_schema(request: Request) -> JSONResponse:
+    """Return the ATR v1.0 JSON Schema.
+
+    The canonical schema for agent-driven decision receipts.
+    Any system can validate a receipt against this schema.
+
+    Returns
+    -------
+    JSONResponse
+        The ATR v1.0 JSON Schema document.
+    """
+    return JSONResponse(
+        content=RECEIPT_SCHEMA,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=300",
+        },
+    )
+
+
+@router.post("/receipt")
+@public_rate_limit()
+async def create_receipt(request: Request) -> JSONResponse:
+    """Create a new ATR v1.0 receipt.
+
+    Stores a compliance receipt in the database. Returns the full
+    receipt with a generated receipt_id and timestamp.
+
+    Requires X-API-Key header if ISG_AGENT_ATR_API_KEY is configured.
+    """
+    if not _verify_atr_api_key(request):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+    body: dict[str, Any] = await request.json()
+    agent_id: str = body.get("agent_id", "")
+    decision: str = body.get("decision", "")
+    decision_reason: str = body.get("decision_reason", "")
+    subject_id: str = body.get("subject_id", "")
+    policy_version: str | None = body.get("policy_version")
+    confidence_score: int | None = body.get("confidence_score")
+    parent_receipt_id: str | None = body.get("parent_receipt_id")
+
+    if not agent_id:
+        raise HTTPException(status_code=422, detail="agent_id is required")
+    if decision not in ("APPROVE", "DECLINE", "REVIEW"):
+        raise HTTPException(status_code=422, detail="decision must be APPROVE, DECLINE, or REVIEW")
+    if not subject_id:
+        raise HTTPException(status_code=422, detail="subject_id is required")
+    if confidence_score is not None and not (0 <= confidence_score <= 100):
+        raise HTTPException(status_code=422, detail="confidence_score must be 0-100")
+
+    receipt_id = str(uuid.uuid4())
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    base_url = _get_base_url(request)
+    verification_endpoint = f"{base_url}/api/v1/public/receipt/{receipt_id}"
+
+    db_path = _resolve_db_path(request)
+    if not db_path:
+        # A receipt that is not persisted is not a receipt — fail loudly.
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    if db_path:
+        import aiosqlite
+
+        async with aiosqlite.connect(db_path) as db:
+            await db.execute(
+                """INSERT INTO atr_receipts
+                (receipt_id, agent_id, decision, decision_reason,
+                 timestamp, subject_id, policy_version, confidence_score,
+                 parent_receipt_id, verification_endpoint)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    receipt_id,
+                    agent_id,
+                    decision,
+                    decision_reason,
+                    timestamp,
+                    subject_id,
+                    policy_version,
+                    confidence_score,
+                    parent_receipt_id,
+                    verification_endpoint,
+                ),
+            )
+            await db.commit()
+
+    receipt: dict[str, object] = {
+        "receipt_id": receipt_id,
+        "agent_id": agent_id,
+        "decision": decision,
+        "decision_reason": decision_reason,
+        "timestamp": timestamp,
+        "subject_id": subject_id,
+        "policy_version": policy_version,
+        "confidence_score": confidence_score,
+        "parent_receipt_id": parent_receipt_id,
+        "verification_endpoint": verification_endpoint,
+    }
+
+    return JSONResponse(
+        content=receipt,
+        status_code=201,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Location": verification_endpoint,
+        },
+    )
+
+
+@router.get("/receipt/{receipt_id}")
+@public_rate_limit()
+async def get_receipt(request: Request, receipt_id: str) -> JSONResponse:
+    """Retrieve an ATR v1.0 receipt by ID.
+
+    Returns the full receipt record. Requires X-API-Key header
+    if ISG_AGENT_ATR_API_KEY is configured.
+
+    Parameters
+    ----------
+    receipt_id:
+        The UUID of the receipt to retrieve.
+
+    Returns
+    -------
+    JSONResponse
+        The full receipt record or 404 if not found.
+    """
+    if not _verify_atr_api_key(request):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+    db_path = _resolve_db_path(request)
+    if not db_path:
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    import aiosqlite
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM atr_receipts WHERE receipt_id = ?", (receipt_id,)
+        )
+        row = await cursor.fetchone()
+
+    if row is None:
+        # Fallback: check if it matches the sample receipt
+        if receipt_id == SAMPLE_RECEIPT["receipt_id"]:
+            return JSONResponse(
+                content=SAMPLE_RECEIPT,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "public, max-age=300",
+                },
+            )
+        raise HTTPException(status_code=404, detail="Receipt not found")
+
+    receipt: dict[str, object] = {
+        "receipt_id": row["receipt_id"],
+        "agent_id": row["agent_id"],
+        "decision": row["decision"],
+        "decision_reason": row["decision_reason"],
+        "timestamp": row["timestamp"],
+        "subject_id": row["subject_id"],
+        "policy_version": row["policy_version"],
+        "confidence_score": row["confidence_score"],
+        "parent_receipt_id": row["parent_receipt_id"],
+        "verification_endpoint": row["verification_endpoint"],
+    }
+
+    return JSONResponse(
+        content=receipt,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=60",
         },
     )

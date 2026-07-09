@@ -276,7 +276,7 @@ class TestLoginUnverified:
             json={"email": email, "password": _STRONG_PASSWORD},
         )
         assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.text}"
-        assert "not verified" in resp.json().get("detail", "").lower()
+        assert "verify your email" in resp.json().get("detail", "").lower()
 
 
 # ---------------------------------------------------------------------------
