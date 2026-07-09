@@ -273,13 +273,34 @@ def build_public_openapi_schema(app: Any) -> dict[str, Any]:
     return schema
 
 
+def _route_table_size(app: Any) -> int:
+    """Count APIRoutes currently registered — the cache-validity fingerprint."""
+    return sum(1 for r in app.routes if isinstance(r, APIRoute))
+
+
 def _cached_schema(request: Request) -> dict[str, Any]:
-    """Return the public schema, building it once per app instance."""
+    """Return the public schema, rebuilt whenever the route table drifts.
+
+    A plain build-once cache pinned an EMPTY spec in production: the first
+    build ran against a route table that was not yet fully populated, and
+    the /health-only result was then served forever. Keying the cache on
+    the live APIRoute count makes it self-healing — any drift (late mounts,
+    early build, hot reload) triggers a rebuild on the next request.
+    """
     app = request.app
+    size = _route_table_size(app)
     cached = getattr(app.state, "public_openapi_schema", None)
-    if cached is None:
+    cached_size = getattr(app.state, "public_openapi_route_count", None)
+    if cached is None or cached_size != size:
+        if cached is not None:
+            logger.warning(
+                "public_docs: route table drifted (%s -> %s APIRoutes) — rebuilding public spec",
+                cached_size, size,
+            )
         cached = build_public_openapi_schema(app)
+        cached.setdefault("info", {})["x-route-table-size"] = size
         app.state.public_openapi_schema = cached
+        app.state.public_openapi_route_count = size
     return cached
 
 
