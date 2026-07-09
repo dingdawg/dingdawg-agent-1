@@ -1,7 +1,7 @@
 {
   "name": "DingDawg",
   "short_name": "DingDawg",
-  "description": "Universal AI Agent Platform — claim your @handle and get an AI agent that works for you",
+  "description": "AI Agent for Small Business — books appointments, sends invoices, collects payments, and handles customer conversations for $1 per action",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",

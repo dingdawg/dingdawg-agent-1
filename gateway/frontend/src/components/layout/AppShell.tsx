@@ -17,6 +17,7 @@ import { Menu, ChevronRight, Plug, Settings } from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "@/store/authStore";
 import { useAgentStore } from "@/store/agentStore";
+import { NewAgentWizard } from "@/components/agents/NewAgentWizard";
 import { useSessionStore } from "@/store/sessionStore";
 import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
@@ -34,7 +35,7 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuthStore();
-  const { currentAgent, agents, fetchAgents, isLoading, error } = useAgentStore();
+  const { currentAgent, agents, fetchAgents, selectAgent, isLoading, error } = useAgentStore();
   const { sessions, activeSessionId } = useSessionStore();
 
   // Mobile: drawer open/closed (always starts closed on mobile)
@@ -49,6 +50,7 @@ export function AppShell({ children }: AppShellProps) {
       return false;
     }
   });
+  const [agentWizardOpen, setAgentWizardOpen] = useState(false);
 
   const toggleDesktopCollapsed = useCallback(() => {
     setDesktopCollapsed((prev) => {
@@ -155,6 +157,10 @@ export function AppShell({ children }: AppShellProps) {
         agentName={currentAgent?.name ?? "DingDawg"}
         currentPath={pathname}
         onLogout={handleLogout}
+        agents={agents.map((a) => ({ id: a.id, name: a.name, handle: a.handle }))}
+        currentAgentId={currentAgent?.id ?? null}
+        onSelectAgent={selectAgent}
+        onNewAgent={() => setAgentWizardOpen(true)}
       />
 
       {/* ── Main column ──────────────────────────────────────────────── */}
@@ -261,6 +267,7 @@ export function AppShell({ children }: AppShellProps) {
       </div>
 
       {/* ── Mobile bottom navigation bar (hidden md+) ────────────────── */}
+      {agentWizardOpen && <NewAgentWizard onClose={() => setAgentWizardOpen(false)} />}
       <MobileBottomNav />
 
       {/* ── Floating agentic assistant (non-dashboard pages only) ────── */}

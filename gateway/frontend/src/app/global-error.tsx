@@ -102,7 +102,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
               fontSize: "0.75rem",
             }}
           >
-            &copy; {new Date().getFullYear()} DingDawg &mdash; Universal AI Agent Platform
+            &copy; {new Date().getFullYear()} DingDawg &mdash; AI Agent for Small Business
           </p>
         </div>
       </body>

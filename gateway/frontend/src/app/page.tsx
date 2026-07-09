@@ -25,7 +25,6 @@ import {
   Phone,
   Shield,
   CheckCircle,
-  Star,
   Clock,
   TrendingUp,
   Plug,
@@ -244,6 +243,9 @@ export default function HomePage() {
             />
             <span className="font-heading font-bold text-[var(--foreground)] text-lg tracking-tight">
               DingDawg
+            </span>
+            <span className="hidden sm:inline-block text-[11px] font-medium text-[var(--color-muted)] border-l border-[var(--stroke)] pl-2 ml-1">
+              for Small Business
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -575,32 +577,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── Social proof / testimonial ──────────────────────────────────── */}
-        <section className="px-6 pb-20 max-w-3xl mx-auto">
-          <div className="glass-panel-gold p-8 text-center">
-            <div className="flex items-center justify-center gap-1 mb-4">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="h-5 w-5 text-[var(--gold-500)] fill-[var(--gold-500)]" />
-              ))}
-            </div>
-            <blockquote className="text-lg text-[var(--foreground)] leading-relaxed mb-4 italic">
-              &ldquo;I cancelled Calendly, my invoicing software, and my chat widget.
-              DingDawg does all three. A customer booked at 11 PM last Tuesday —
-              my agent confirmed the appointment, sent the invoice, and collected
-              the deposit. I didn&apos;t lift a finger.&rdquo;
-            </blockquote>
-            <div className="flex items-center justify-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[var(--gold-500)]/20 flex items-center justify-center text-sm font-bold text-[var(--gold-500)]">
-                <span className="text-base">💇</span>
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-semibold text-[var(--foreground)]">Salon owner, early adopter</p>
-                <p className="text-xs text-[var(--color-muted)]">Saving 10+ hours/week on admin tasks</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* ── Pricing preview ─────────────────────────────────────────────── */}
         <section className="px-6 pb-20 max-w-5xl mx-auto">
           <h2 className="font-heading text-2xl sm:text-3xl font-bold text-[var(--foreground)] text-center mb-3">
@@ -724,6 +700,15 @@ export default function HomePage() {
             </div>
           </div>
           <p className="text-center text-xs text-[var(--color-muted)] mt-8">
+            Part of the DingDawg governance ecosystem &mdash;{" "}
+            <a
+              href="https://dingdawg.com"
+              className="text-[var(--gold-500)] hover:underline"
+            >
+              dingdawg.com
+            </a>
+          </p>
+          <p className="text-center text-xs text-[var(--color-muted)] mt-3">
             &copy; 2026 Innovative Systems Global LLC. All rights reserved.
           </p>
         </footer>

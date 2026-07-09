@@ -38,12 +38,12 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   metadataBase: new URL("https://app.dingdawg.com"),
   title: {
-    default: "DingDawg — Your AI Agent Platform | $1/Action",
+    default: "DingDawg — AI Agent for Small Business | $1/Action",
     template: "%s | DingDawg",
   },
   description:
-    "Claim your @handle and get an AI agent that works for you. " +
-    "DingDawg powers AI agents for businesses, creators, and individuals.",
+    "DingDawg gives your small business an AI agent that books appointments, " +
+    "sends invoices, collects payments, and handles customer conversations — for $1 per action.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -88,27 +88,31 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "DingDawg",
-    title: "DingDawg — Your AI Agent Platform | $1/Action",
-    description: "Claim your @handle and get an AI agent that works for you.",
+    title: "DingDawg — AI Agent for Small Business | $1/Action",
+    description:
+      "An AI agent that books appointments, sends invoices, collects payments, " +
+      "and handles customer conversations — for $1 per action.",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "DingDawg AI Agent Platform",
+        alt: "DingDawg — AI Agent for Small Business",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "DingDawg — Your AI Agent Platform | $1/Action",
-    description: "Claim your @handle and get an AI agent that works for you.",
+    title: "DingDawg — AI Agent for Small Business | $1/Action",
+    description:
+      "An AI agent that books appointments, sends invoices, collects payments, " +
+      "and handles customer conversations — for $1 per action.",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "DingDawg AI Agent Platform",
+        alt: "DingDawg — AI Agent for Small Business",
       },
     ],
   },

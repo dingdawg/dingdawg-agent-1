@@ -38,6 +38,7 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import type { DashboardStats } from "@/components/dashboard/DashboardHeader";
 import { GettingStarted } from "@/components/dashboard/GettingStarted";
 import { AIDisclosureBanner } from "@/components/chat/AIDisclosureBanner";
+import { RightSidebar } from "@/components/layout/RightSidebar";
 import { generateId } from "@/lib/utils";
 
 export default function DashboardPage() {
@@ -452,24 +453,49 @@ function generateQuickReplies(responseText: string): string[] {
 
 // ─── Quick Action Chips ───────────────────────────────────────────────────────────────
 
-const QUICK_CHIPS = [
-  { label: "Morning pulse", prompt: "Give me my morning business pulse" },
-  { label: "Book appointment", prompt: "Book a demo appointment for a new client this week" },
-  { label: "Check tasks", prompt: "Show me my active tasks" },
-  { label: "Send invoice", prompt: "Help me send an invoice to a client" },
-] as const;
+type ChipEntry = { readonly label: string; readonly prompt: string };
 
-function QuickActionChips({ onSend }: { onSend: (prompt: string) => void }) {
-  // Shared pill styling — each button stays a horizontal pill on both layouts.
+const CHANNEL_CHIPS: Record<ChannelId, readonly ChipEntry[]> = {
+  chat: [
+    { label: "Morning pulse",    prompt: "Give me my morning business pulse" },
+    { label: "Book appointment", prompt: "Book a demo appointment for a new client this week" },
+    { label: "Check tasks",      prompt: "Show me my active tasks" },
+    { label: "Send invoice",     prompt: "Help me send an invoice to a client" },
+  ],
+  tasks: [
+    { label: "List tasks",       prompt: "Show me all my active tasks and their status" },
+    { label: "Create task",      prompt: "Help me create a new task" },
+    { label: "Due today",        prompt: "What tasks are due today?" },
+    { label: "Assign task",      prompt: "Assign a task to a team member" },
+  ],
+  files: [
+    { label: "Recent files",     prompt: "Show me my recent files" },
+    { label: "Find document",    prompt: "Help me find a document" },
+    { label: "Share file",       prompt: "Help me share a file with someone" },
+    { label: "Upload",           prompt: "Help me upload a file" },
+  ],
+  notes: [
+    { label: "New note",         prompt: "Help me create a new note" },
+    { label: "Find note",        prompt: "Find a note for me" },
+    { label: "Meeting notes",    prompt: "Help me capture meeting notes" },
+    { label: "Summarize",        prompt: "Summarize my recent notes" },
+  ],
+};
+
+function QuickActionChips({
+  onSend,
+  chips,
+}: {
+  onSend: (prompt: string) => void;
+  chips: readonly ChipEntry[];
+}) {
   const chipClass =
     "flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-medium border border-[var(--stroke2)] bg-white/[0.04] text-[var(--foreground)] hover:bg-[var(--gold-500)]/10 hover:border-[var(--gold-500)]/30 hover:text-[var(--gold-500)] transition-colors duration-150 whitespace-nowrap min-h-[44px]";
   return (
     <>
-      {/* Desktop — fixed right-side vertical stack. Keeps chat column clean
-          and fills the otherwise-empty right rail. Stays horizontal pill-style
-          per button, just arranged top-to-bottom. */}
-      <div className="hidden md:flex fixed right-6 top-1/2 -translate-y-1/2 flex-col items-end gap-2 z-20">
-        {QUICK_CHIPS.map((chip) => (
+      {/* Desktop — fixed right-side vertical stack; hidden once RightSidebar is mounted (xl+) */}
+      <div className="hidden md:flex xl:hidden fixed right-6 top-1/2 -translate-y-1/2 flex-col items-end gap-2 z-20">
+        {chips.map((chip) => (
           <button
             key={chip.label}
             type="button"
@@ -480,9 +506,9 @@ function QuickActionChips({ onSend }: { onSend: (prompt: string) => void }) {
           </button>
         ))}
       </div>
-      {/* Mobile — original horizontal row at the bottom, unchanged. */}
+      {/* Mobile — horizontal scroll row at the bottom */}
       <div className="flex md:hidden items-center gap-2 px-4 pb-2 pt-1 overflow-x-auto scrollbar-none flex-shrink-0">
-        {QUICK_CHIPS.map((chip) => (
+        {chips.map((chip) => (
           <button
             key={chip.label}
             type="button"
@@ -1127,6 +1153,18 @@ function ChatDashboard() {
   // Keep ref in sync so card callbacks always use the latest handleSend
   handleSendRef.current = handleSend;
 
+  // Channel-aware send — prefixes non-chat messages so the agent knows context
+  const handleChannelSend = useCallback(
+    (content: string) => {
+      if (activeChannel === "chat") return handleSend(content);
+      if (activeChannel === "tasks") return handleSend(`[Tasks] ${content}`);
+      if (activeChannel === "files") return handleSend(`[Files] ${content}`);
+      if (activeChannel === "notes") return handleSend(`[Notes] ${content}`);
+      return handleSend(content);
+    },
+    [activeChannel, handleSend]
+  );
+
   const handleQuickReply = useCallback(
     (reply: string) => handleSend(reply),
     [handleSend]
@@ -1404,7 +1442,7 @@ function ChatDashboard() {
                 <AgentCapabilityStrip onSend={handleSend} />
 
                 {/* Quick action chips — flex flow, sit above fixed bar, never clipped */}
-                <QuickActionChips onSend={handleSend} />
+                <QuickActionChips onSend={handleChannelSend} chips={CHANNEL_CHIPS[activeChannel]} />
 
                 {/* Spacer — reserves height for fixed bar (input + disclaimer only) on mobile */}
                 <div className="h-[68px] flex-shrink-0 md:hidden" />
@@ -1455,7 +1493,7 @@ function ChatDashboard() {
               />
 
               {/* Quick action chips — flex flow, sit above fixed bar, never clipped */}
-              <QuickActionChips onSend={handleSend} />
+              <QuickActionChips onSend={handleChannelSend} chips={CHANNEL_CHIPS[activeChannel]} />
 
               {/* Spacer — reserves height for fixed bar (input + disclaimer only) on mobile */}
               <div className="h-[84px] flex-shrink-0 md:hidden" />
@@ -1488,6 +1526,11 @@ function ChatDashboard() {
             </div>
           );
         })()}
+      </div>
+
+      {/* Right sidebar — desktop xl+ only; hidden on mobile to preserve chat width */}
+      <div className="hidden xl:flex">
+        <RightSidebar onCliCommand={handleSend} onAction={handleSend} />
       </div>
     </div>
   );

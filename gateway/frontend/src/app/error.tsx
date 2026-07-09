@@ -74,7 +74,7 @@ export default function Error({ error, reset }: ErrorProps) {
 
         {/* Footer brand */}
         <p className="mt-10 text-[var(--muted)] text-xs">
-          &copy; {new Date().getFullYear()} DingDawg &mdash; Universal AI Agent Platform
+          &copy; {new Date().getFullYear()} DingDawg &mdash; AI Agent for Small Business
         </p>
       </div>
     </div>

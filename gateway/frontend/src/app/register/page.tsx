@@ -165,7 +165,7 @@ function RegisterForm() {
             Create Account
           </h1>
           <p className="text-xs font-semibold text-[var(--gold-500)] tracking-widest uppercase">
-            Your AI Agent Platform
+            AI Agent for Small Business
           </p>
           <p className="text-sm text-[var(--color-muted)] mt-1">
             Get started with DingDawg Agent
