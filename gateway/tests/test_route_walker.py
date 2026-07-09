@@ -32,11 +32,28 @@ def _make_app_with_router() -> FastAPI:
     return app
 
 
-class _FakeContainerRoute:
-    """Mimics newer FastAPI's container route: children under .routes."""
+class _FakeCtx:
+    """Models 0.139's _EffectiveRouteContext: FULL resolved path + dependant."""
 
-    def __init__(self, children):
-        self.routes = children
+    def __init__(self, path):
+        self.path = path
+        self.methods = {"GET"}
+        self.include_in_schema = True
+        self.dependant = type("D", (), {"call": staticmethod(lambda: None)})()
+
+
+class _FakeContainerRoute:
+    """Models the REAL FastAPI >=0.137 _IncludedRouter (venv-verified on
+    0.139.0): NO .routes attribute; the canonical expansion is the
+    effective_route_contexts() METHOD, whose contexts carry FULLY resolved
+    paths through every nesting level (original_router.routes children only
+    carry per-include relative paths — the trap the first fix fell into)."""
+
+    def __init__(self, paths):
+        self._paths = paths
+
+    def effective_route_contexts(self):
+        return [_FakeCtx(p) for p in self._paths]
 
 
 def test_flat_registration_yields_all_api_routes():
@@ -67,14 +84,15 @@ def test_container_registration_is_recursed():
               per occurrence and nothing that is not an APIRoute leaks out.
     """
     app = _make_app_with_router()
-    real_routes = [r for r in app.routes if isinstance(r, APIRoute)]
-    direct, nested = real_routes[0], real_routes[1:]
+    direct = next(r for r in app.routes if isinstance(r, APIRoute))
 
-    table = [direct, _FakeContainerRoute([*nested, _FakeContainerRoute(nested)])]
+    table = [direct, _FakeContainerRoute(["/api/v1/things/list", "/api/v1/things/deep/leaf"])]
     found = list(iter_api_routes(table))
     assert direct in found
-    assert all(isinstance(r, APIRoute) for r in found)
-    assert len(found) == 1 + len(nested) * 2
+    paths = {r.path for r in found}
+    assert paths == {"/health", "/api/v1/things/list", "/api/v1/things/deep/leaf"}
+    for r in found:
+        assert callable(r.endpoint) and r.methods
 
 
 def test_leaf_without_routes_attr_is_skipped():

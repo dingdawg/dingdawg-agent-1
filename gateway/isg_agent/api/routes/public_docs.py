@@ -154,34 +154,41 @@ def build_public_openapi_schema(app: Any) -> dict[str, Any]:
     """
     from fastapi.openapi.utils import get_openapi
 
-    from isg_agent.core.route_validator import iter_api_routes
-
-    selected: list[APIRoute] = []
-    for route in iter_api_routes(app.routes):
-        if not route.include_in_schema:
-            continue
-        methods = frozenset(route.methods or set())
-        if not _route_matches(route.path, methods):
-            continue
-        lowered = route.path.lower()
-        denied = [m for m in _DENY_MARKERS if m in lowered]
-        if denied:
-            logger.warning(
-                "public_docs: route %s matched allowlist but hit deny markers %s — dropped",
-                route.path,
-                denied,
-            )
-            continue
-        selected.append(route)
-
+    # Generate-then-filter (S1182 1b): hand the WHOLE route table to
+    # get_openapi so each FastAPI version resolves its own route shapes
+    # natively (flat APIRoutes pre-0.137, _IncludedRouter containers after
+    # — container children carry per-include relative paths, so route-level
+    # selection can never be version-proof). The public contract is then
+    # enforced on the generated paths dict: allowlist per path+method,
+    # deny-markers after.
     base_url = _public_base_url()
     schema = get_openapi(
         title=_SPEC_TITLE,
         version=getattr(app, "version", "1.0.0"),
         description=_SPEC_DESCRIPTION,
-        routes=selected,
+        routes=app.routes,
         servers=[{"url": base_url, "description": "Production"}],
     )
+
+    filtered_paths: dict[str, Any] = {}
+    for path, operations in schema.get("paths", {}).items():
+        lowered = path.lower()
+        denied = [m for m in _DENY_MARKERS if m in lowered]
+        if denied:
+            logger.warning(
+                "public_docs: path %s matched allowlist but hit deny markers %s — dropped",
+                path,
+                denied,
+            )
+            continue
+        kept_ops = {
+            method: op
+            for method, op in operations.items()
+            if _route_matches(path, frozenset({method.upper()}))
+        }
+        if kept_ops:
+            filtered_paths[path] = kept_ops
+    schema["paths"] = filtered_paths
     schema.setdefault("info", {})["contact"] = {
         "name": "DingDawg Support",
         "email": "hello@dingdawg.com",
