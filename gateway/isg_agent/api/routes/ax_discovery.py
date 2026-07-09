@@ -61,6 +61,14 @@ def _entrypoints(base: str) -> dict:
             "receipt_sample": f"{base}/api/v1/public/receipt/sample",
             "receipt_schema": f"{base}/api/v1/public/receipt/schema",
         },
+        "onboarding": {
+            "self_onboard": f"{base}/api/v1/agents/self-onboard",
+            "flow": (
+                "POST handle+contact_email+purpose -> 201 pending; human "
+                "approves by email; poll with your token to collect the key "
+                "(delivered exactly once; requests expire after 72h)."
+            ),
+        },
         "docs": {
             "openapi": f"{base}/openapi.json",
             "interactive": f"{base}/docs",
@@ -112,6 +120,7 @@ def _render_llms_txt(base: str) -> str:
 - [Agent capability index]({base}/.well-known/agents.json): every machine-readable surface in one document
 - [ACP product catalog]({e["acp"]["products"]}): plans and pricing, machine-readable (single source of truth)
 - [MCP discovery]({e["mcp"]["discovery"]}): connect to platform tools over Model Context Protocol
+- [Self-onboard]({e["onboarding"]["self_onboard"]}): request access programmatically — a human approves by email, then collect your key
 
 ## Purchase (Agentic Commerce Protocol)
 

@@ -57,6 +57,8 @@ class TestLlmsTxt:
             # ACP manifest lives under the router prefix — a root-level
             # /.well-known/acp-manifest link would 404 (live-verified).
             f"{BASE}/api/v1/acp/.well-known/acp-manifest",
+            # The full agent loop must be discoverable: onboard → key → buy.
+            f"{BASE}/api/v1/agents/self-onboard",
             f"{BASE}/.well-known/mcp.json",
             f"{BASE}/.well-known/did.json",
             f"{BASE}/openapi.json",
