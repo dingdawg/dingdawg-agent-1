@@ -76,6 +76,8 @@ PUBLIC_SPEC_RULES: tuple[tuple[str, frozenset[str] | None, str], ...] = (
     ("/api/v1/payments/create-checkout-session", frozenset({"POST"}), "exact"),
     # Platform discovery documents + security.txt
     ("/.well-known/", frozenset({"GET"}), "prefix"),
+    # Agent-readable platform manifest (llmstxt.org convention)
+    ("/llms.txt", frozenset({"GET"}), "exact"),
 )
 
 #: Defense in depth — a selected path containing any of these markers is

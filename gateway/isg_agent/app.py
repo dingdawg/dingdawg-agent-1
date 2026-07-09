@@ -901,6 +901,7 @@ def create_app() -> FastAPI:
     from isg_agent.api.routes.cli_invoke import router as cli_router
     from isg_agent.api.routes.webhooks_inbound import router as webhooks_inbound_router
     from isg_agent.api.routes.well_known import router as well_known_router
+    from isg_agent.api.routes.ax_discovery import router as ax_discovery_router
     from isg_agent.api.routes.acp_routes import router as acp_router
     from isg_agent.api.routes.brand_verification import router as brand_verification_router
     from isg_agent.api.routes.admin import router as admin_router
@@ -954,6 +955,7 @@ def create_app() -> FastAPI:
     app.include_router(cli_router)
     app.include_router(webhooks_inbound_router)
     app.include_router(well_known_router)
+    app.include_router(ax_discovery_router)
     app.include_router(acp_router)
     app.include_router(brand_verification_router)
     app.include_router(admin_router)
