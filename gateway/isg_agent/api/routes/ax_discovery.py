@@ -49,7 +49,9 @@ def _entrypoints(base: str) -> dict:
             "manifest": f"{base}/api/v1/acp/.well-known/acp-manifest",
             "capabilities": f"{base}/api/v1/acp/capabilities",
             "products": f"{base}/api/v1/acp/products",
-            "checkout_sessions": f"{base}/api/v1/acp/checkout_sessions",
+            # Live-probed (S1184): POST /api/v1/acp/checkout -> 401 auth-gated.
+            # "checkout_sessions" never existed — it 404'd while advertised.
+            "checkout": f"{base}/api/v1/acp/checkout",
         },
         "identity": {
             "platform_did": f"{base}/.well-known/did.json",
@@ -126,7 +128,7 @@ def _render_llms_txt(base: str) -> str:
 
 - [Merchant manifest]({e["acp"]["manifest"]}): ACP discovery document
 - [Capabilities]({e["acp"]["capabilities"]}): supported ACP operations
-- [Checkout sessions]({e["acp"]["checkout_sessions"]}): POST to open a checkout programmatically
+- [Checkout]({e["acp"]["checkout"]}): POST to open a checkout programmatically (authenticated)
 
 ## Identity & Trust
 

@@ -59,11 +59,24 @@ class TestLlmsTxt:
             f"{BASE}/api/v1/acp/.well-known/acp-manifest",
             # The full agent loop must be discoverable: onboard → key → buy.
             f"{BASE}/api/v1/agents/self-onboard",
+            # The REAL checkout route (live-probed: POST -> 401 auth-gated).
+            # /checkout_sessions never existed in any code version — it 404'd
+            # on prod while advertised as the purchase entrypoint (S1184).
+            f"{BASE}/api/v1/acp/checkout",
             f"{BASE}/.well-known/mcp.json",
             f"{BASE}/.well-known/did.json",
             f"{BASE}/openapi.json",
         ):
             assert url in body, f"llms.txt missing {url}"
+
+    @pytest.mark.asyncio
+    async def test_no_dead_acp_paths(self, app):
+        """The checkout_sessions ghost path must never be advertised again —
+        a 404 at the purchase entrypoint is a broken promise to buyer agents."""
+        body = (await _get(app, "/llms.txt")).text
+        assert "checkout_sessions" not in body
+        doc = (await _get(app, "/.well-known/agents.json")).text
+        assert "checkout_sessions" not in doc
 
     @pytest.mark.asyncio
     async def test_no_hardcoded_prices(self, app):
