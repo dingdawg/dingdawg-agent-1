@@ -568,6 +568,7 @@ async def apply_discount(
 async def complete_checkout(
     session_id: str,
     body: CompleteCheckoutBody,
+    request: Request,
     current_user: CurrentUser = Depends(require_auth),
 ) -> JSONResponse:
     """Complete an ACP checkout session by submitting payment.
@@ -616,6 +617,33 @@ async def complete_checkout(
         current_user.user_id,
         session.total,
     )
+
+    # Trust flywheel (Wave 3): every completed checkout emits an ATR receipt.
+    # Fail-open — a receipt failure must NEVER fail a completed payment; the
+    # gap is logged for reconciliation instead.
+    try:
+        from isg_agent.db.receipts import persist_receipt
+
+        settings = getattr(request.app.state, "settings", None)
+        db_path = getattr(settings, "db_path", None)
+        if db_path:
+            await persist_receipt(
+                db_path=db_path,
+                base_url=_get_base_url(request),
+                agent_id=getattr(session, "agent_id", None)
+                or f"user:{current_user.user_id}",
+                decision="APPROVE",
+                decision_reason=(
+                    f"ACP checkout completed: order {session.order_id}, "
+                    f"total {session.total} (minor units)"
+                ),
+                subject_id=str(session.order_id),
+            )
+    except Exception as exc:
+        logger.warning(
+            "ACP receipt emission failed for order %s: %s", session.order_id, exc
+        )
+
     return JSONResponse(content=session.to_dict(), status_code=status.HTTP_200_OK)
 
 

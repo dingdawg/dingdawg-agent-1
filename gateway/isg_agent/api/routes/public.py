@@ -833,61 +833,55 @@ async def create_receipt(request: Request) -> JSONResponse:
     if confidence_score is not None and not (0 <= confidence_score <= 100):
         raise HTTPException(status_code=422, detail="confidence_score must be 0-100")
 
-    receipt_id = str(uuid.uuid4())
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    base_url = _get_base_url(request)
-    verification_endpoint = f"{base_url}/api/v1/public/receipt/{receipt_id}"
-
     db_path = _resolve_db_path(request)
     if not db_path:
         # A receipt that is not persisted is not a receipt — fail loudly.
         raise HTTPException(status_code=503, detail="Database not configured")
 
-    if db_path:
-        import aiosqlite
+    from isg_agent.db.receipts import persist_receipt
 
-        async with aiosqlite.connect(db_path) as db:
-            await db.execute(
-                """INSERT INTO atr_receipts
-                (receipt_id, agent_id, decision, decision_reason,
-                 timestamp, subject_id, policy_version, confidence_score,
-                 parent_receipt_id, verification_endpoint)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    receipt_id,
-                    agent_id,
-                    decision,
-                    decision_reason,
-                    timestamp,
-                    subject_id,
-                    policy_version,
-                    confidence_score,
-                    parent_receipt_id,
-                    verification_endpoint,
-                ),
-            )
-            await db.commit()
-
-    receipt: dict[str, object] = {
-        "receipt_id": receipt_id,
-        "agent_id": agent_id,
-        "decision": decision,
-        "decision_reason": decision_reason,
-        "timestamp": timestamp,
-        "subject_id": subject_id,
-        "policy_version": policy_version,
-        "confidence_score": confidence_score,
-        "parent_receipt_id": parent_receipt_id,
-        "verification_endpoint": verification_endpoint,
-    }
+    receipt = await persist_receipt(
+        db_path=db_path,
+        base_url=_get_base_url(request),
+        agent_id=agent_id,
+        decision=decision,
+        decision_reason=decision_reason,
+        subject_id=subject_id,
+        policy_version=policy_version,
+        confidence_score=confidence_score,
+        parent_receipt_id=parent_receipt_id,
+    )
 
     return JSONResponse(
         content=receipt,
         status_code=201,
         headers={
             "Access-Control-Allow-Origin": "*",
-            "Location": verification_endpoint,
+            "Location": str(receipt["verification_endpoint"]),
+        },
+    )
+
+
+@router.get("/trust-score/{handle}")
+@public_rate_limit()
+async def trust_score(handle: str, request: Request) -> JSONResponse:
+    """Public, PII-free trust summary of an agent's receipt trail (Wave 3).
+
+    Buyer agents cite this before recommending a counterparty. An agent
+    with no history reports ``score: null`` — unknown, never 0 or 100.
+    """
+    db_path = _resolve_db_path(request)
+    if not db_path:
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    from isg_agent.db.receipts import trust_summary
+
+    summary = await trust_summary(db_path=db_path, agent_id=handle)
+    return JSONResponse(
+        content=summary,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=60",
         },
     )
 
