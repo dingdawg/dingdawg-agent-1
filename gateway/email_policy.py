@@ -1,3 +1,13 @@
+"""Standalone email-policy helpers (UNUSED as of 2026-07-09 — kept for reference).
+
+RENAMED from email_validator.py: that filename shadowed the pypi
+``email-validator`` package on sys.path (gateway/ is the cwd in dev,
+tests, and Railway), which broke pydantic's EmailStr everywhere in the
+app with ``AttributeError: module 'email_validator' has no attribute
+'EmailNotValidError'``. Never name a repo-root module after a pip
+dependency.
+"""
+
 from __future__ import annotations
 
 import re
