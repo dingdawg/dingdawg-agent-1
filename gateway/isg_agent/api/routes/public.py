@@ -110,12 +110,21 @@ router = APIRouter(prefix="/api/v1/public", tags=["public"])
 # ---------------------------------------------------------------------------
 
 
-def _verify_atr_api_key(request: Request) -> bool:
+def _verify_atr_api_key(request: Request, *, require_configured: bool = False) -> bool:
     """Check X-API-Key header against configured ATR API key.
 
-    If no key is configured (empty string), auth is skipped and all
-    requests are allowed. This supports local development where no
-    API key is set.
+    If no key is configured (empty string) and ``require_configured`` is
+    False, auth is skipped and the request is allowed. This supports local
+    development where no API key is set, and keeps receipt reads public by
+    design (third-party verification is the whole point of an audit trail).
+
+    ``require_configured=True`` (used by the receipt WRITE path) instead
+    treats an unconfigured key as a hard deny -- never open access. This
+    endpoint mints entries in a compliance ledger; "convenient for local
+    dev" must never mean "anyone can forge a receipt in production because
+    nobody set an env var." A real production incident: ISG_AGENT_ATR_API_KEY
+    was never configured on Railway, so every caller could POST a receipt
+    for any agent_id, including agents that were never even approved.
     """
     settings = getattr(request.app.state, "settings", None)
     if settings is None:
@@ -126,7 +135,7 @@ def _verify_atr_api_key(request: Request) -> bool:
 
         settings = get_settings()
     if not settings.atr_api_key:
-        return True  # No key configured = open access
+        return not require_configured
     header_key = request.headers.get("x-api-key", "")
     return header_key == settings.atr_api_key
 
@@ -810,9 +819,11 @@ async def create_receipt(request: Request) -> JSONResponse:
     Stores a compliance receipt in the database. Returns the full
     receipt with a generated receipt_id and timestamp.
 
-    Requires X-API-Key header if ISG_AGENT_ATR_API_KEY is configured.
+    Always requires a real X-API-Key header matching ISG_AGENT_ATR_API_KEY --
+    unlike reads, an unconfigured key denies rather than opens this endpoint
+    (this mints entries in a compliance ledger; it must never be forgeable).
     """
-    if not _verify_atr_api_key(request):
+    if not _verify_atr_api_key(request, require_configured=True):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
     body: dict[str, Any] = await request.json()

@@ -119,17 +119,25 @@ def _check_sendgrid_basic_auth(request: Request) -> bool:
 def _check_twilio_signature(request: Request, form_params: dict[str, str]) -> bool:
     """Validate the Twilio HMAC-SHA1 webhook signature.
 
-    If ISG_AGENT_TWILIO_AUTH_TOKEN is not configured, validation is skipped
-    and the request is allowed through (permissive dev-mode behaviour).
+    Requires ISG_AGENT_TWILIO_AUTH_TOKEN to be configured -- an unconfigured
+    token now denies the request rather than allowing it through. The same
+    bug class as the ATR receipt-forgery vulnerability (an unconfigured
+    secret silently defeating auth, found live via an unauthenticated
+    POST that minted a fake compliance receipt in production) applied here
+    would let anyone spoof an inbound SMS (arbitrary From/To/Body) and have
+    it processed as authentic. Fail closed, not open.
 
-    Returns True if signature is valid or validation is skipped, False if
-    signature is present but invalid.
+    Returns True only if a real token is configured AND the signature
+    matches. False otherwise (missing token, missing signature, or
+    mismatch).
     """
     auth_token = os.environ.get("ISG_AGENT_TWILIO_AUTH_TOKEN", "")
     if not auth_token:
-        # Dev mode: no token configured → allow all
-        logger.warning("Twilio auth token not configured — webhook signature validation skipped")
-        return True
+        logger.error(
+            "Twilio auth token not configured — rejecting inbound webhook "
+            "(unconfigured secret must never mean open access)"
+        )
+        return False
 
     twilio_sig = request.headers.get("X-Twilio-Signature", "")
     if not twilio_sig:
@@ -366,8 +374,8 @@ async def twilio_inbound(request: Request) -> dict:
 
     PUBLIC endpoint — authenticated via Twilio HMAC-SHA1 signature in the
     ``X-Twilio-Signature`` header, validated against
-    ISG_AGENT_TWILIO_AUTH_TOKEN.  When the env var is not set, signature
-    validation is skipped (dev-mode permissive behaviour).
+    ISG_AGENT_TWILIO_AUTH_TOKEN.  The token is now REQUIRED — if the env var
+    is not set, every request is rejected (fail closed, not open).
 
     Twilio sends a form-encoded POST with:
     - ``From``       : sender phone number (E.164)
@@ -375,7 +383,8 @@ async def twilio_inbound(request: Request) -> dict:
     - ``Body``       : message text
     - ``MessageSid`` : unique message identifier
 
-    Returns 401 if signature validation fails when an auth token is configured.
+    Returns 401 if the auth token is not configured, the signature header is
+    missing, or the signature does not match.
     """
     # Parse form data
     try:

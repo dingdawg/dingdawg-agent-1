@@ -368,11 +368,15 @@ class TestTwilioInbound:
         sig = hmac.new(auth_token.encode(), s.encode(), hashlib.sha1).digest()
         return base64.b64encode(sig).decode()
 
-    async def test_twilio_returns_200_without_signature_validation_in_test(
+    async def test_twilio_rejects_when_no_auth_token_configured_at_all(
         self, client
     ) -> None:
-        """Twilio endpoint returns 200 for valid form data (signature validation
-        is skipped when ISG_AGENT_TWILIO_AUTH_TOKEN is not set in test env)."""
+        """Regression: _check_twilio_signature's documented 'no token
+        configured == allow all' fallback let anyone POST a spoofed inbound
+        SMS (arbitrary From/To/Body) with zero credentials and have it
+        processed as a real message -- the exact same bug class as the ATR
+        receipt-forgery vulnerability found this session (unconfigured
+        secret silently defeats auth instead of denying). Must now reject."""
         form_data = {
             "From": "+15551234567",
             "To": "+15559876543",
@@ -383,28 +387,14 @@ class TestTwilioInbound:
             "/api/v1/webhooks/twilio/inbound",
             data=form_data,
         )
-        # In test env without Twilio auth token configured, should accept or
-        # return 200 (signature validation is skipped when token not set)
-        assert resp.status_code in {200, 401}
-
-    async def test_twilio_returns_200_with_valid_form_data(self, client) -> None:
-        """Twilio SMS form data is accepted and returns 200."""
-        form_data = {
-            "From": "+15551234567",
-            "To": "+15559876543",
-            "Body": "Hello from Twilio",
-            "MessageSid": "SM9876543210fedcba",
-        }
-        # Without a configured auth token, the endpoint should allow through
-        # (graceful degradation in dev mode)
-        resp = await client.post(
-            "/api/v1/webhooks/twilio/inbound",
-            data=form_data,
+        assert resp.status_code == 401, (
+            f"expected 401 (no Twilio token configured must deny), got "
+            f"{resp.status_code} -- if this is 200, spoofed inbound SMS are "
+            f"being processed as authentic again"
         )
-        assert resp.status_code in {200, 401}
 
-    async def test_twilio_response_is_json(self, client) -> None:
-        """Twilio endpoint always returns JSON response body."""
+    async def test_twilio_response_is_json_on_reject(self, client) -> None:
+        """Twilio endpoint still returns a JSON error body when rejecting."""
         form_data = {
             "From": "+15551234567",
             "To": "+15559876543",
@@ -415,38 +405,24 @@ class TestTwilioInbound:
             "/api/v1/webhooks/twilio/inbound",
             data=form_data,
         )
-        # Response should be parseable as JSON regardless of status
+        assert resp.status_code == 401
         content_type = resp.headers.get("content-type", "")
-        assert "json" in content_type or resp.status_code in {200, 401}
+        assert "json" in content_type
 
-    async def test_twilio_handles_empty_body(self, client) -> None:
-        """Empty Body field is handled gracefully."""
-        form_data = {
-            "From": "+15551234567",
-            "To": "+15559876543",
-            "Body": "",
-            "MessageSid": "SM001",
-        }
-        resp = await client.post(
-            "/api/v1/webhooks/twilio/inbound",
-            data=form_data,
-        )
-        assert resp.status_code in {200, 401}
-
-    async def test_twilio_is_public_endpoint(self, client) -> None:
-        """Twilio webhook does not require JWT auth — no Bearer token needed."""
+    async def test_twilio_is_public_endpoint_no_jwt_required(self, client) -> None:
+        """Twilio webhook does not require JWT auth (tier isolation must
+        pass it through) -- it has its own auth mechanism (signature), so a
+        missing Bearer token specifically must not produce a 403."""
         form_data = {
             "From": "+15551234567",
             "To": "+15559876543",
             "Body": "Test no JWT",
             "MessageSid": "SM002",
         }
-        # No Authorization header at all
         resp = await client.post(
             "/api/v1/webhooks/twilio/inbound",
             data=form_data,
         )
-        # Should NOT return 403 (tier isolation must pass it through)
         assert resp.status_code != 403
 
     async def test_twilio_with_configured_auth_token_validates_signature(

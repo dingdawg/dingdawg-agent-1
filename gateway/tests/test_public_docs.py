@@ -249,8 +249,12 @@ class TestReceiptEndpoints:
         }
 
     async def test_create_receipt_happy_path_and_roundtrip(
-        self, lifespan_client: AsyncClient
+        self, keyed_lifespan_client: AsyncClient
     ) -> None:
+        """Creating a receipt is a WRITE to the compliance ledger -- it must
+        always require a real API key (see TestReceiptAuthBoundary below for
+        why an unconfigured key must NOT fall back to open access). Reads
+        stay public by design (third-party receipt verification)."""
         payload = {
             "agent_id": "@compliance-bot",
             "decision": "DECLINE",
@@ -259,7 +263,11 @@ class TestReceiptEndpoints:
             "policy_version": "1.4.2",
             "confidence_score": 94,
         }
-        resp = await lifespan_client.post("/api/v1/public/receipt", json=payload)
+        resp = await keyed_lifespan_client.post(
+            "/api/v1/public/receipt",
+            json=payload,
+            headers={"X-API-Key": "test-atr-key-42"},
+        )
         assert resp.status_code == 201, resp.text
         body = resp.json()
         assert body["agent_id"] == "@compliance-bot"
@@ -274,36 +282,41 @@ class TestReceiptEndpoints:
             "hardcoded placeholder?"
         )
 
-        # Round-trip: the receipt must be retrievable
-        resp2 = await lifespan_client.get(
-            f"/api/v1/public/receipt/{body['receipt_id']}"
+        # Round-trip: the receipt must be retrievable. get_receipt's own
+        # auth behavior is unchanged by this fix -- once a key IS configured
+        # (as it is on this fixture), reads require it too, same as before.
+        resp2 = await keyed_lifespan_client.get(
+            f"/api/v1/public/receipt/{body['receipt_id']}",
+            headers={"X-API-Key": "test-atr-key-42"},
         )
         assert resp2.status_code == 200, resp2.text
         assert resp2.json()["receipt_id"] == body["receipt_id"]
         assert resp2.json()["decision"] == "DECLINE"
 
     async def test_create_receipt_rejects_bad_decision(
-        self, lifespan_client: AsyncClient
+        self, keyed_lifespan_client: AsyncClient
     ) -> None:
-        resp = await lifespan_client.post(
+        resp = await keyed_lifespan_client.post(
             "/api/v1/public/receipt",
             json={"agent_id": "@x", "decision": "MAYBE", "subject_id": "s"},
+            headers={"X-API-Key": "test-atr-key-42"},
         )
         assert resp.status_code == 422
 
     async def test_create_receipt_rejects_missing_agent_id(
-        self, lifespan_client: AsyncClient
+        self, keyed_lifespan_client: AsyncClient
     ) -> None:
-        resp = await lifespan_client.post(
+        resp = await keyed_lifespan_client.post(
             "/api/v1/public/receipt",
             json={"decision": "APPROVE", "subject_id": "s"},
+            headers={"X-API-Key": "test-atr-key-42"},
         )
         assert resp.status_code == 422
 
     async def test_create_receipt_rejects_out_of_range_confidence(
-        self, lifespan_client: AsyncClient
+        self, keyed_lifespan_client: AsyncClient
     ) -> None:
-        resp = await lifespan_client.post(
+        resp = await keyed_lifespan_client.post(
             "/api/v1/public/receipt",
             json={
                 "agent_id": "@x",
@@ -311,6 +324,7 @@ class TestReceiptEndpoints:
                 "subject_id": "s",
                 "confidence_score": 150,
             },
+            headers={"X-API-Key": "test-atr-key-42"},
         )
         assert resp.status_code == 422
 
@@ -325,6 +339,27 @@ class TestReceiptEndpoints:
 
 class TestReceiptAuthBoundary:
     """Negative-path boundary: ISG_AGENT_ATR_API_KEY configured."""
+
+    async def test_create_receipt_with_no_key_configured_at_all_returns_401(
+        self, lifespan_client: AsyncClient
+    ) -> None:
+        """Regression: _verify_atr_api_key's documented 'no key configured ==
+        open access' fallback was applied identically to writes and reads.
+        In production, ISG_AGENT_ATR_API_KEY was never configured, so ANY
+        caller could mint a fake compliance receipt for ANY agent_id with
+        zero credentials -- found live via a real unauthenticated POST that
+        returned 201 against api.dingdawg.com. Reads (GET /receipt/{id})
+        are intentionally public for third-party verification; writes never
+        should be, regardless of whether ops remembered to set a key."""
+        resp = await lifespan_client.post(
+            "/api/v1/public/receipt",
+            json={"agent_id": "@forged-agent", "decision": "APPROVE", "subject_id": "s"},
+        )
+        assert resp.status_code == 401, (
+            f"expected 401 (no ATR key configured must deny writes), got "
+            f"{resp.status_code}: {resp.text} -- if this is 201, the "
+            f"unauthenticated-receipt-forgery bug is back"
+        )
 
     async def test_create_receipt_without_key_returns_401(
         self, keyed_lifespan_client: AsyncClient
