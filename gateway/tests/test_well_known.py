@@ -123,6 +123,18 @@ async def test_mcp_endpoint_returns_200(client):
 
 
 @pytest.mark.asyncio
+async def test_mcp_discovery_agents_endpoint_is_public(client):
+    """The advertised discovery list must be reachable without credentials."""
+    document = await client.get(_WELL_KNOWN_PATH)
+    assert document.status_code == 200
+    assert document.json()["endpoints"]["agents"].endswith("/api/v1/public/agents")
+
+    agents = await client.get("/api/v1/public/agents")
+    assert agents.status_code == 200
+    assert isinstance(agents.json()["agents"], list)
+
+
+@pytest.mark.asyncio
 async def test_mcp_content_type_is_json(client):
     """Response Content-Type header is application/json."""
     resp = await client.get(_WELL_KNOWN_PATH)

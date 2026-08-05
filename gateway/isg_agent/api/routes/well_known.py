@@ -128,7 +128,7 @@ async def mcp_discovery(request: Request) -> JSONResponse:
             "token_url": f"{base_url}{_AUTHENTICATION['token_url']}",
         },
         "endpoints": {
-            "agents": f"{base_url}/api/v1/agents",
+            "agents": f"{base_url}/api/v1/public/agents",
             "skills": f"{base_url}/api/v1/skills",
             "templates": f"{base_url}/api/v1/templates",
             "trigger": f"{base_url}/api/v1/agents/{{agent_id}}/trigger",
@@ -183,10 +183,8 @@ def _build_mcp_server_card(base_url: str) -> dict:
             "title": "DingDawg Agent Platform",
             "version": "1.0.0",
             "description": (
-                "AI agent platform for businesses — claim your @handle, "
-                "deploy a governed AI agent in minutes. "
-                "Supports 16 universal skills, gaming sector, "
-                "multi-channel delivery (voice, SMS, email, web widget)."
+                "AI agent platform for businesses. Available capabilities are "
+                "discovered after authentication."
             ),
             "provider": {
                 "organization": "DingDawg Inc.",
